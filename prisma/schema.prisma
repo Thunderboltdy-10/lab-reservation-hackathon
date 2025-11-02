@@ -1,0 +1,147 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Post {
+  id        String   @id @default(cuid())
+  title     String
+  content   String?
+  createdAt DateTime @default(now())
+}
+
+enum Role {
+  STUDENT
+  TEACHER
+  ADMIN
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  firstName String
+  lastName   String
+  role      Role     @default(STUDENT)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // relations
+  seatBookings  SeatBooking[]
+  sessions  Session[] @relation("TeacherSessions")
+
+  equipmentBookings EquipmentBooking[]
+}
+
+model Lab {
+  id        String   @id @default(cuid())
+  name      String
+  capacity  Int      @default(10)
+  createdAt DateTime @default(now())
+  description String?
+
+  seats    Seat[]
+  sessions Session[]
+
+  equipment Equipment[]
+}
+
+model Seat {
+  id        String   @id @default(cuid())
+  lab       Lab      @relation(fields: [labId], references: [id])
+  labId     String
+  row       Int?
+  col       Int?
+  name      String
+  createdAt DateTime @default(now())
+
+  seatBookings SeatBooking[]
+}
+
+model Session {
+  id          String    @id @default(cuid())
+  lab         Lab       @relation(fields: [labId], references: [id])
+  labId       String
+  startAt     DateTime
+  endAt       DateTime
+  capacity    Int       // default to lab.capacity when creating
+  createdBy   User      @relation("TeacherSessions", fields: [createdById], references: [id])
+  createdById String
+  createdAt   DateTime  @default(now())
+
+  seatBookings    SeatBooking[] @relation("SessionSeatBookings")
+
+  @@index([startAt, endAt])
+  @@unique([labId, startAt, endAt])
+
+  sessionEquipment SessionEquipment[]
+  equipmentBookings EquipmentBooking[]
+
+}
+
+model SeatBooking {
+  id         String   @id @default(cuid())
+  seat       Seat     @relation(fields: [seatId], references: [id])
+  seatId     String
+  session    Session  @relation("SessionSeatBookings", fields: [sessionId], references: [id])
+  sessionId  String   // denormalized for easy uniqueness per session
+  createdAt  DateTime @default(now())
+  name       String   @default("A1")
+
+  user        User          @relation(fields: [userId], references: [id])
+  userId      String
+  
+  @@unique([sessionId, userId]) // prevent duplicate bookings by same user for a session
+  @@unique([seatId, sessionId]) // seat cannot be assigned twice for same session
+
+  equipmentBookings EquipmentBooking[]
+}
+
+model Equipment {
+  id          String   @id @default(cuid())
+  labId       String
+  lab         Lab      @relation(fields: [labId], references: [id])
+  name        String
+  description String?
+  total       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  sessionAvailability SessionEquipment[]
+  bookings            EquipmentBooking[]
+}
+
+model SessionEquipment {
+  id          String   @id @default(cuid())
+  sessionId   String
+  session     Session  @relation(fields: [sessionId], references: [id])
+  equipmentId String
+  equipment   Equipment @relation(fields: [equipmentId], references: [id])
+
+  available   Int
+  reserved    Int      @default(0)
+
+  @@unique([sessionId, equipmentId])
+  @@index([sessionId, equipmentId])
+}
+
+model EquipmentBooking {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id])
+  sessionId     String
+  session       Session  @relation(fields: [sessionId], references: [id])
+  equipmentId   String
+  equipment     Equipment @relation(fields: [equipmentId], references: [id])
+  seatBookingId String?   // optional
+  seatBooking   SeatBooking? @relation(fields: [seatBookingId], references: [id])
+  amount        Int      @default(1)
+  createdAt     DateTime @default(now())
+
+  @@unique([userId, sessionId, equipmentId])
+  @@index([sessionId, equipmentId])
+}
+
