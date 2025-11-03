@@ -10,7 +10,7 @@ import { toast } from 'sonner'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Input } from '@/components/ui/input'
 import { Dialog, DialogClose, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
-import { isBookingAtom } from '@/lib/atoms'
+import { equipmentAtom, isBookingAtom } from '@/lib/atoms'
 import { useAuth } from '@clerk/nextjs'
 import { useTheme } from 'next-themes'
 
@@ -20,7 +20,9 @@ const CalendarPicker = ({lab, isTeacher}: {lab: string | null, isTeacher: boolea
     const [endDate, setEndDate] = React.useState<Date | undefined>(undefined)
 
     const [isPopupOpenAdd, setIsPopupOpenAdd] = useState(false)
+
     const [booking, setBooking] = useAtom(isBookingAtom)
+    const [equipment, setEquipment] = useAtom(equipmentAtom)
 
     const {userId} = useAuth()
     const {theme} = useTheme()
@@ -134,7 +136,9 @@ const CalendarPicker = ({lab, isTeacher}: {lab: string | null, isTeacher: boolea
         window.addEventListener("keydown", (e) => {
             if (e.key === "Escape") {
                 setBooking(null)
-        }})
+                setEquipment(null)
+            }
+        })
     }, [])
 
     useEffect(() => {
@@ -193,7 +197,7 @@ const CalendarPicker = ({lab, isTeacher}: {lab: string | null, isTeacher: boolea
                     {data?.map(sess => (
                         <div key={sess.id}>
                             <div className='flex flex-col'>
-                                <div className={`bg-gray-800 rounded-lg w-full text-center border-2 border-gray-600 relative cursor-pointer p-1 ${booking === sess.id && "outline-blue"}`}>
+                                <div className={`bg-gray-800 rounded-lg w-full text-center border-2 border-gray-600 relative p-1 ${(booking === sess.id || equipment === sess.id) && "outline-blue"}`}>
                                     <div className='text-white font-semibold pt-2 mb-1 text-lg'>{new Date(sess.startAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - {new Date(sess.endAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
                                     <div className='text-gray-400'>Capacity: {sess.capacity}</div>
                                     <div className='text-gray-400'>Created by: {sess.createdBy.firstName} {sess.createdBy.lastName}</div>
@@ -202,10 +206,21 @@ const CalendarPicker = ({lab, isTeacher}: {lab: string | null, isTeacher: boolea
                                             <Button className='flex-1'
                                              variant={theme === "dark" ? "default" : "secondary"}
                                              onClick={() => {
+                                                setEquipment(null)
                                                 setBooking(sess.id)
                                                 toast("Press esc to cancel booking")
                                             }}>Book</Button>
                                         :<Button className='flex-1' onClick={() => setBooking(null)} variant={theme === "dark" ? "default" : "secondary"}>Cancel</Button>
+                                        }
+                                        {equipment !== sess.id ?
+                                            <Button className='flex-1'
+                                             variant={theme === "dark" ? "default" : "secondary"}
+                                             onClick={() => {
+                                                setBooking(null)
+                                                setEquipment(sess.id)
+                                                toast("Press esc to cancel session equipment selection")
+                                            }}>Equipment</Button>
+                                        :<Button className='flex-1' onClick={() => setEquipment(null)} variant={theme === "dark" ? "default" : "secondary"}>Cancel</Button>
                                         }
                                         {sess.createdBy.id === userId && isTeacher && <>
                                             <Dialog>

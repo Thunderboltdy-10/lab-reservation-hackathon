@@ -372,13 +372,76 @@ export const accountRouter = createTRPCRouter({
             }
         })
     }),
-    getSEssionEquipment: privateProcedure.input(z.object({
+    addLabEquipment: privateProcedure.input(z.object({
+        labId: z.string(),
+        name: z.string(),
+        total: z.number()
+    })).mutation(async ({ctx, input}) => {
+        return await ctx.db.equipment.create({
+            data: {
+                labId: input.labId,
+                name: input.name,
+                total: input.total
+            }
+        })
+    }),
+    getLabEquipment: privateProcedure.input(z.object({
+        labId: z.string()
+    })).query(async ({ctx, input}) => {
+        return await ctx.db.equipment.findMany({
+            where: {
+                labId: input.labId
+            },
+            select: {
+                id: true,
+                name: true,
+                total: true
+            }
+        })
+    }),
+    deleteLabEquipment: privateProcedure.input(z.object({
+        id: z.string()
+    })).mutation(async ({ctx, input}) => {
+        return await ctx.db.equipment.delete({
+            where: {
+                id: input.id
+            }
+        })
+    }),
+    updateLabEquipment: privateProcedure.input(z.object({
+        id: z.string(),
+        name: z.string().optional(),
+        total: z.number().optional()
+    })).mutation(async ({ctx, input}) => {
+        return await ctx.db.equipment.update({
+            where: {
+                id: input.id
+            },
+            data: {
+                name: input.name,
+                total: input.total
+            }
+        })
+    }),
+    getSessionEquipment: privateProcedure.input(z.object({
         sessionId: z.string()
     })).query(async ({ctx, input}) => {
         return await ctx.db.sessionEquipment.findMany({
             where: {
                 sessionId: input.sessionId
+            },
+            select: {
+                id: true,
+                equipmentId: true,
+                equipment: {
+                    select: {
+                        id: true,
+                        name: true,
+                        total: true
+                    }
+                },
+                available: true
             }
         })
-    })
+    }),
 })  

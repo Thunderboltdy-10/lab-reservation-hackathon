@@ -94,7 +94,7 @@ export function AppSidebar() {
                 <SidebarHeader>
                     <div className="flex mt-2">
                         {state === "expanded" && <>
-                            <h1 className="text-lg ml-5">Global College Labs</h1>
+                            <h1 className="text-lg ml-5">The Global College Labs</h1>
                         </>}
                         <div className="ml-auto"><SidebarTrigger /></div>
                     </div>
