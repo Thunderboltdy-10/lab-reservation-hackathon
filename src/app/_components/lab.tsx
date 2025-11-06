@@ -11,8 +11,9 @@ import { useAuth } from '@clerk/nextjs'
 import CalendarPicker from './calendarPicker'
 import { useTheme } from 'next-themes'
 import { Input } from '@/components/ui/input'
-import { PencilIcon, PlusIcon, X } from 'lucide-react'
+import { MinusIcon, PencilIcon, PlusIcon, X } from 'lucide-react'
 import { Separator } from '@/components/ui/separator'
+import { ItemIndicator } from '@radix-ui/react-dropdown-menu'
 
 function SeatLegend({ booking, isPhysics }: { booking: string | null, isPhysics: boolean}) {
     if (!booking) return null;
@@ -51,8 +52,10 @@ function SeatLegend({ booking, isPhysics }: { booking: string | null, isPhysics:
 const Lab = ({isPhysics, isTeacher}: {isPhysics: boolean, isTeacher: boolean}) => {
     const [booking, setBooking] = useAtom(isBookingAtom)
     const [equipment, setEquipment] = useAtom(equipmentAtom)
-    const [editableEquipment, setEditableEquipment] = useState<{id: string, name: string, total: number}[]>([])
-    const [changedEquipment, setChangedEquipment] = useState<{id: string, name: string, total: number}[]>([])
+    const [displayedLabEquipment, setDisplayedLabEquipment] = useState<{id: string, name: string, total: number}[]>([])
+    const [editedLabEquipment, setEditedLabEquipment] = useState<{id: string, name: string, total: number}[]>([])
+    const [availableSessionEquipment, setAvailableSessionEquipment] = useState<{name: string, id: string, total: number, available: number}[]>([])
+    const [displayedSessionEquipment, setDisplayedSessionEquipment] = useState<{name: string, id: string, total: number, available: number}[]>([])
 
     const [templateVisible, setTemplateVisible] = useState(false)
     const [templateName, setTemplateName] = useState("")
@@ -67,6 +70,7 @@ const Lab = ({isPhysics, isTeacher}: {isPhysics: boolean, isTeacher: boolean}) =
     const addLabEquipmentMutation = api.account.addLabEquipment.useMutation()
     const deleteLabEquipmentMutation = api.account.deleteLabEquipment.useMutation()
     const updateLabEquipmentMutation = api.account.updateLabEquipment.useMutation()
+    const updateSessionEquipmentMutation = api.account.updateSessionEquipment.useMutation()
 
     const {data: seats} = api.account.getSeatIds.useQuery({
         labId: labId!
@@ -168,13 +172,13 @@ const Lab = ({isPhysics, isTeacher}: {isPhysics: boolean, isTeacher: boolean}) =
     }
 
     const updateLabEquipment = (id: string) => {
-        const newEquipment = changedEquipment.find(e => e.id === id)
-        if (!newEquipment) return
+        const eq = editedLabEquipment.find(e => e.id === id)
+        if (!eq) return
 
         updateLabEquipmentMutation.mutate({
-            id: newEquipment.id,
-            name: newEquipment.name,
-            total: newEquipment.total
+            id: eq.id,
+            name: eq.name,
+            total: eq.total
         }, {
             onSuccess: () => {
                 toast.success("Equipment successfully updated")
@@ -182,6 +186,49 @@ const Lab = ({isPhysics, isTeacher}: {isPhysics: boolean, isTeacher: boolean}) =
             },
             onError: (error) => {
                 toast.error("Error updating equipment")
+            }
+        })
+    }
+
+    const updateSessionEquipment = () => {
+        const deletedEq = sessionEquipment?.filter(eq => !availableSessionEquipment.some(e => e.id === eq.equipmentId)) ?? []
+
+        const addedEq = availableSessionEquipment.filter(eq => !sessionEquipment?.some(e => e.equipmentId === eq.id))
+
+        const updatedEq = availableSessionEquipment.filter(
+            eq => {
+                const e = sessionEquipment?.find(q => q.equipmentId === eq.id)
+                return e && e.available !== eq.available
+            }
+        )
+
+        updateSessionEquipmentMutation.mutate({
+            sessionId: equipment!,
+            deletedEq: deletedEq.map(e => {
+                return {
+                    id: e.equipmentId,
+                    available: e.available
+                }
+            }),
+            addedEq: addedEq.map(e => {
+                return {
+                    id: e.id,
+                    available: e.available
+                }
+            }),
+            updatedEq: updatedEq.map(e => {
+                return {
+                    id: e.id,
+                    available: e.available
+                }
+            }),
+        }, {
+            onSuccess: () => {
+                toast.success("Session equipment successfully updated")
+                refetchSessionEquipment()
+            },
+            onError: (error) => {
+                toast.error("Error updating session equipment")
             }
         })
     }
@@ -198,9 +245,18 @@ const Lab = ({isPhysics, isTeacher}: {isPhysics: boolean, isTeacher: boolean}) =
 
     useEffect(() => {
         if (!labEquipment) return
-
-        setEditableEquipment(labEquipment.map(e => ({id: e.id, name: e.name, total: e.total})))
+        setDisplayedLabEquipment(labEquipment.map(e => ({id: e.id, name: e.name, total: e.total})))
+        setDisplayedSessionEquipment(labEquipment.map(e => ({name: e.name, id: e.id, total: e.total, available: e.total})))
     }, [labEquipment, refetchLabEquipment])
+
+    useEffect(() => {
+        if (!sessionEquipment) return
+
+        sessionEquipment.forEach(eq => {
+            setDisplayedSessionEquipment(prev => prev.map(e => e.id === eq.equipmentId ? {...e, available: e.available - eq.available} : e))
+            setAvailableSessionEquipment(sessionEquipment.map(e => ({name: e.equipment.name, id: e.equipmentId, total: e.equipment.total, available: e.id === eq.equipmentId ? e.available - eq.available : e.available})))
+        });
+    }, [sessionEquipment, refetchSessionEquipment])
 
     return (
         <div className="flex flex-col h-screen overflow-hidden">
@@ -479,13 +535,13 @@ const Lab = ({isPhysics, isTeacher}: {isPhysics: boolean, isTeacher: boolean}) =
                                 <div className='bg-gray-800 rounded-lg w-full flex text-center border-2 border-gray-600 relative p-2 items-center justify-between text-white' key={index}>
                                     <Input type="text" id={item.id}
                                         className='!bg-transparent w-fit max-w-[150px] mr-2 border-none focus-visible:ring-0 focus-visible:ring-offset-0' placeholder="Equipment Name"
-                                        value={editableEquipment[index]?.name ?? ""}
+                                        value={displayedLabEquipment[index]?.name ?? ""}
                                         onChange={(e) => {
                                             const newName = e.target.value
 
-                                            setEditableEquipment(prev => prev.map(eq => eq.id === item.id ? {...eq, name: newName} : eq))
+                                            setDisplayedLabEquipment(prev => prev.map(eq => eq.id === item.id ? {...eq, name: newName} : eq))
 
-                                            setChangedEquipment(prev => {
+                                            setEditedLabEquipment(prev => {
                                                 const existing = prev.find(eq => eq.id === item.id)
                                                 if (existing) return prev.map(eq => eq.id === item.id ? {...eq, name: newName} : eq)
                                                 else return [...prev, {id: item.id, name: newName, total: item.total}]
@@ -494,14 +550,14 @@ const Lab = ({isPhysics, isTeacher}: {isPhysics: boolean, isTeacher: boolean}) =
                                     />
                                     <div className="flex items-center border-rounded-md">
                                         <div
-                                            className={`flex-1 cursor-pointer select-none ${editableEquipment[index]?.total === 1 ? "opacity-50" : ""}`}
+                                            className={`flex-1 cursor-pointer select-none ${displayedLabEquipment[index]?.total === 1 ? "opacity-50" : ""}`}
                                             onClick={() => {
-                                                if (!editableEquipment[index]) return
-                                                const newTotal = Math.max(1, editableEquipment[index].total - 1)
+                                                if (!displayedLabEquipment[index]) return
+                                                const newTotal = Math.max(1, displayedLabEquipment[index].total - 1)
 
-                                                setEditableEquipment(prev => prev.map(eq => eq.id === item.id ? {...eq, total: newTotal} : eq))
+                                                setDisplayedLabEquipment(prev => prev.map(eq => eq.id === item.id ? {...eq, total: newTotal} : eq))
 
-                                                setChangedEquipment(prev => {
+                                                setEditedLabEquipment(prev => {
                                                     const existing = prev.find(eq => eq.id === item.id)
                                                     if (existing) return prev.map(eq => eq.id === item.id ? {...eq, total: newTotal} : eq)
                                                     else return [...prev, {id: item.id, name: item.name, total: newTotal}]
@@ -510,15 +566,15 @@ const Lab = ({isPhysics, isTeacher}: {isPhysics: boolean, isTeacher: boolean}) =
                                         >-</div>
                                         <Input type='text'
                                             className='!bg-transparent w-10 border-none text-center focus-visible:ring-0 focus-visible:ring-offset-0' placeholder="Quantity"
-                                            value={editableEquipment[index]?.total ?? ""}
+                                            value={displayedLabEquipment[index]?.total ?? ""}
                                             onChange={(e) => {
                                                 var newTotal = parseInt(e.target.value)
                                                 if (e.target.value === "") newTotal = 1
                                                 if (newTotal < 1) return
 
-                                                setEditableEquipment(prev => prev.map(eq => eq.id === item.id ? {...eq, total: newTotal} : eq))
+                                                setDisplayedLabEquipment(prev => prev.map(eq => eq.id === item.id ? {...eq, total: newTotal} : eq))
 
-                                                setChangedEquipment(prev => {
+                                                setEditedLabEquipment(prev => {
                                                     const existing = prev.find(eq => eq.id === item.id)
                                                     if (existing) return prev.map(eq => eq.id === item.id ? {...eq, total: newTotal} : eq)
                                                     else return [...prev, {id: item.id, name: item.name, total: newTotal}]
@@ -527,13 +583,13 @@ const Lab = ({isPhysics, isTeacher}: {isPhysics: boolean, isTeacher: boolean}) =
                                         />
                                         <div
                                             className='flex-1 cursor-pointer select-none'
-                                            onClick={(e) => {
-                                                if (!editableEquipment[index]) return
-                                                const newTotal = editableEquipment[index].total + 1
+                                            onClick={() => {
+                                                if (!displayedLabEquipment[index]) return
+                                                const newTotal = displayedLabEquipment[index].total + 1
 
-                                                setEditableEquipment(prev => prev.map(eq => eq.id === item.id ? {...eq, total: newTotal} : eq))
+                                                setDisplayedLabEquipment(prev => prev.map(eq => eq.id === item.id ? {...eq, total: newTotal} : eq))
 
-                                                setChangedEquipment(prev => {
+                                                setEditedLabEquipment(prev => {
                                                     const existing = prev.find(eq => eq.id === item.id)
                                                     if (existing) return prev.map(eq => eq.id === item.id ? {...eq, total: newTotal} : eq)
                                                     else return [...prev, {id: item.id, name: item.name, total: newTotal}]
@@ -542,11 +598,11 @@ const Lab = ({isPhysics, isTeacher}: {isPhysics: boolean, isTeacher: boolean}) =
                                         >+</div>
                                     </div>
                                     <Button
-                                    className={`flex-1 ml-4 mr-1 ${(editableEquipment[index]?.total === item.total && editableEquipment[index]?.name === item.name) ? "hidden" : ""}`}
+                                    className={`flex-1 ml-4 mr-1 ${(displayedLabEquipment[index]?.total === item.total && displayedLabEquipment[index]?.name === item.name) ? "hidden" : ""}`}
                                     variant={theme === "dark" ? "default" : "secondary"}
                                     onClick={() => {updateLabEquipment(item.id)}}>Save</Button>
                                     <div
-                                    className={`w-fit cursor-pointer ${(editableEquipment[index]?.total === item.total && editableEquipment[index]?.name === item.name) ? "" : "hidden"}`}
+                                    className={`w-fit cursor-pointer ${(displayedLabEquipment[index]?.total === item.total && displayedLabEquipment[index]?.name === item.name) ? "" : "hidden"}`}
                                     onClick={() => document.getElementById(item.id)?.focus()}><PencilIcon size="icon" className='w-5' /></div>
                                     <div className='w-fit cursor-pointer' onClick={() => {
                                         deleteLabEquipment(item.id)
@@ -554,22 +610,74 @@ const Lab = ({isPhysics, isTeacher}: {isPhysics: boolean, isTeacher: boolean}) =
                                 </div>
                             )) : <div className='text-center text-gray-400'>No equipment added</div>)}
                             {equipment !== null && <div>
-                                {(sessionEquipment?.length ?? 0 > 0) ? (sessionEquipment && sessionEquipment.map((item, index) => (
-                                    <div className='bg-gray-800 rounded-lg w-full border-2 border-gray-600 flex text-center  relative p-2 items-center justify-between mb-2' key={index}>
-                                        <div className='cursor-pointer'><PlusIcon size="icon" className='w-5' /></div>
-                                        <div className='flex-1'>{item.equipment.id}</div>
+                                {(availableSessionEquipment?.length ?? 0 > 0) ? (availableSessionEquipment && availableSessionEquipment.map((item, index) => (
+                                    <div className='bg-gray-800 rounded-lg w-full border-2 border-gray-600 flex text-center  relative p-2 items-center justify-between mb-2 select-none' key={index}>
+                                        {displayedSessionEquipment.find(eq => eq.id === item.id && eq.available > 0) && 
+                                            <div className='cursor-pointer' onClick={() => {
+                                                const remaining = displayedSessionEquipment.find(eq => eq.id === item.id)?.available ?? 0
+                                                if (remaining < 1) return
+
+                                                setAvailableSessionEquipment(prev => prev.map(eq => eq.id === item.id ? {...eq, available: eq.available + 1} : eq))
+                                                setDisplayedSessionEquipment(prev => prev.map(eq => eq.id === item.id ? {...eq, available: eq.available - 1} : eq))
+                                            }}><PlusIcon size="icon" className='w-5' /></div>
+                                        }
+                                        <div className='cursor-pointer ml-1' onClick={() => {
+                                            if (item.available < 1) return
+                                            if (item.available === 1) {
+                                                setAvailableSessionEquipment(prev => prev.filter(eq => eq.id !== item.id))
+                                            } else {
+                                                setAvailableSessionEquipment(prev => prev.map(eq => eq.id === item.id ? {...eq, available: eq.available - 1} : eq))
+                                            }
+
+                                            setDisplayedSessionEquipment(prev => prev.map(eq => eq.id === item.id ? {...eq, available: eq.available + 1} : eq))
+                                        }}><MinusIcon size="icon" className='w-5' /></div>
+                                        <div className='flex-1 mr-8'>{item.name}</div>
                                         <div className='mr-2'>{item.available}</div>
                                     </div>
                                 ))) : <div className='text-center text-gray-400'>No equipment chosen</div>}
-                                <div className="border-2 border-gray-600 rounded-lg my-2"></div>
-                                {(labEquipment?.length ?? 0 > 0) ? (labEquipment && labEquipment.map((item, index) => (
-                                    <div className='bg-gray-800 rounded-lg w-full border-2 border-gray-600 flex text-center  relative p-2 items-center justify-between mb-2' key={index}>
-                                        <div className='cursor-pointer'><PlusIcon size="icon" className='w-5' /></div>
-                                        <div className='flex-1'>{item.name}</div>
-                                        <div className='mr-2'>{item.total}</div>
-                                    </div>
+                                <div className='border-2 border-gray-400 rounded-md my-4'></div>
+                                <div><div className='font-medium my-4 text-center'>Lab Equipment Available</div></div>
+                                {(displayedSessionEquipment?.length ?? 0 > 0) ? (displayedSessionEquipment && displayedSessionEquipment.map((item, index) => (
+                                    item.available > 0 && (
+                                        <div className='bg-gray-800 rounded-lg w-full border-2 border-gray-600 flex text-center  relative p-2 items-center justify-between mb-2 select-none' key={index}>
+                                            <div className='cursor-pointer' onClick={() => {
+                                                if (item.available < 1) return
+
+                                                if (availableSessionEquipment.find(eq => eq.id === item.id)) {
+                                                    setAvailableSessionEquipment(prev => prev.map(eq => eq.id === item.id ? {...eq, available: eq.available + 1} : eq))
+                                                } else {
+                                                    setAvailableSessionEquipment(prev => [...prev, {...item, available: 1}])
+                                                }
+                                                setDisplayedSessionEquipment(prev => prev.map(eq => eq.id === item.id ? {...eq, available: eq.available - 1} : eq))
+                                            }}><PlusIcon size="icon" className='w-5' /></div>
+                                            <div className='flex-1'>{item.name}</div>
+                                            <div className='mr-2'>{item.available}</div>
+                                        </div>
+                                    )
                                 ))) : <div className='text-center text-gray-400'>No equipment available</div>}
                             </div>}
+                            {sessionEquipment && availableSessionEquipment && 
+                                (() => {
+                                    const hasChanges = availableSessionEquipment.some(e => {
+                                        const match = sessionEquipment.find(eq => eq.equipmentId === e.id);
+                                        if (!match) return true;
+                                        return match.available !== e.available;
+                                    }) || sessionEquipment.some(e => {
+                                        const stillExists = availableSessionEquipment.find(eq => eq.id === e.equipmentId)
+                                        return !stillExists
+                                    })
+
+                                    return hasChanges;
+                                })() && (
+                                    <Button 
+                                    className="w-full mt-4" 
+                                    variant={theme === "dark" ? "default" : "secondary"} 
+                                    onClick={updateSessionEquipment}
+                                    >
+                                    Save
+                                    </Button>
+                                )
+                            }
                         </div>
                     </div>}
                 </div>

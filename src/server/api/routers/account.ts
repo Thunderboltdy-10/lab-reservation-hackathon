@@ -396,6 +396,9 @@ export const accountRouter = createTRPCRouter({
                 id: true,
                 name: true,
                 total: true
+            },
+            orderBy: {
+                total: "desc"
             }
         })
     }),
@@ -444,4 +447,51 @@ export const accountRouter = createTRPCRouter({
             }
         })
     }),
+    updateSessionEquipment: privateProcedure.input(z.object({
+        sessionId: z.string(),
+        deletedEq: z.object({
+            id: z.string(),
+            available: z.number()
+        }).array(),
+        addedEq: z.object({
+            id: z.string(),
+            available: z.number()
+        }).array(),
+        updatedEq: z.object({
+            id: z.string(),
+            available: z.number()
+        }).array()
+    })).mutation(async ({ctx, input}) => {
+        const deleteEq = await ctx.db.sessionEquipment.deleteMany({
+            where: {
+                sessionId: input.sessionId,
+                equipmentId: {
+                    in: input.deletedEq.map(eq => eq.id)
+                }
+            }
+        })
+
+        for (const eq of input.updatedEq) {
+            await ctx.db.sessionEquipment.update({
+                where: {
+                    sessionId_equipmentId: {
+                        sessionId: input.sessionId,
+                        equipmentId: eq.id
+                    }
+                },
+                data: {
+                    available: eq.available
+                }
+            })
+        }
+
+
+        const addEq = await ctx.db.sessionEquipment.createMany({
+            data: input.addedEq.map(eq => ({
+                sessionId: input.sessionId,
+                equipmentId: eq.id,
+                available: eq.available
+            }))
+        })
+    })
 })  
