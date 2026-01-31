@@ -110,12 +110,16 @@ const RoleEntry = ({
       </div>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <div className="flex cursor-pointer items-center justify-center gap-2 transition-colors">
+          <button
+            type="button"
+            aria-label="Change role"
+            className="flex cursor-pointer items-center justify-center gap-2 transition-colors"
+          >
             <Badge variant={getRoleBadgeVariant(role)} className="min-w-20">
               {role}
             </Badge>
             <PencilIcon className="h-4 w-4 text-muted-foreground hover:text-foreground" />
-          </div>
+          </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent>
           <DropdownMenuRadioGroup
@@ -138,7 +142,13 @@ const RoleEntry = ({
       </DropdownMenu>
       <Dialog>
         <DialogTrigger asChild>
-          <Trash2Icon className="mx-2 h-5 w-5 cursor-pointer text-muted-foreground transition-colors hover:text-destructive" />
+          <button
+            type="button"
+            aria-label="Delete user"
+            className="mx-2 h-5 w-5 cursor-pointer text-muted-foreground transition-colors hover:text-destructive"
+          >
+            <Trash2Icon className="h-5 w-5" />
+          </button>
         </DialogTrigger>
         <DialogContent>
           <DialogHeader className="flex items-center text-center">

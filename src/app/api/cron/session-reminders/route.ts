@@ -4,6 +4,7 @@ import {
   sendStudentReminderEmail,
   sendTeacherSummaryEmail,
 } from "@/server/services/email";
+import { db } from "@/server/db";
 
 // This route should be called by a cron job (e.g., Vercel Cron, every 5 minutes)
 // For Vercel Cron, add to vercel.json:
@@ -17,7 +18,11 @@ export async function GET(request: Request) {
   const authHeader = request.headers.get("authorization");
   const cronSecret = process.env.CRON_SECRET;
 
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+  if (!cronSecret) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  if (authHeader !== `Bearer ${cronSecret}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -57,6 +62,11 @@ export async function GET(request: Request) {
           );
         }
       }
+
+      await db.session.update({
+        where: { id: session.id },
+        data: { studentReminderSentAt: new Date() },
+      });
     }
 
     // Send teacher summaries (15 minutes before)
@@ -77,6 +87,7 @@ export async function GET(request: Request) {
           return {
             name: `${booking.user.firstName} ${booking.user.lastName}`,
             seatName: booking.seat.name,
+            notes: (booking as any).notes || null, // Include booking notes for teacher summary
             equipment: equipment.length > 0 ? equipment : undefined,
           };
         });
@@ -98,6 +109,10 @@ export async function GET(request: Request) {
           }
         );
         results.teacherEmailsSent++;
+        await db.session.update({
+          where: { id: session.id },
+          data: { teacherReminderSentAt: new Date() },
+        });
       } catch (error) {
         results.errors.push(
           `Failed to send teacher summary to ${session.createdBy.email}: ${error}`

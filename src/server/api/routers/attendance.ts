@@ -7,6 +7,81 @@ import z from "zod";
 import { TRPCError } from "@trpc/server";
 
 export const attendanceRouter = createTRPCRouter({
+  getRecentAttendance: teacherProcedure
+    .input(
+      z
+        .object({
+          take: z.number().min(1).max(20).optional(),
+        })
+        .optional()
+    )
+    .query(async ({ ctx, input }) => {
+      const take = input?.take ?? 5;
+      const sessions = await ctx.db.session.findMany({
+        where: {
+          attendances: { some: {} },
+        },
+        include: {
+          lab: { select: { name: true } },
+          attendances: { select: { status: true } },
+        },
+        orderBy: { startAt: "desc" },
+        take,
+      });
+
+      return sessions.map((session) => {
+        const present = session.attendances.filter((a) => a.status === "PRESENT").length;
+        const absent = session.attendances.filter((a) => a.status === "ABSENT").length;
+        const excused = session.attendances.filter((a) => a.status === "EXCUSED").length;
+        return {
+          id: session.id,
+          labName: session.lab.name,
+          startAt: session.startAt,
+          endAt: session.endAt,
+          present,
+          absent,
+          excused,
+        };
+      });
+    }),
+
+  getAttendanceSessions: teacherProcedure
+    .input(
+      z.object({
+        scope: z.enum(["upcoming", "past"]),
+        take: z.number().min(1).max(50).optional(),
+      })
+    )
+    .query(async ({ ctx, input }) => {
+      const now = new Date();
+      const take = input.take ?? 20;
+      const where =
+        input.scope === "upcoming"
+          ? { startAt: { gte: now } }
+          : { endAt: { lt: now } };
+
+      const sessions = await ctx.db.session.findMany({
+        where,
+        include: {
+          lab: { select: { name: true } },
+          seatBookings: { select: { id: true } },
+          attendances: { select: { status: true } },
+        },
+        orderBy: { startAt: input.scope === "upcoming" ? "asc" : "desc" },
+        take,
+      });
+
+      return sessions.map((session) => ({
+        id: session.id,
+        labName: session.lab.name,
+        startAt: session.startAt,
+        endAt: session.endAt,
+        totalBooked: session.seatBookings.length,
+        present: session.attendances.filter((a) => a.status === "PRESENT").length,
+        absent: session.attendances.filter((a) => a.status === "ABSENT").length,
+        excused: session.attendances.filter((a) => a.status === "EXCUSED").length,
+      }));
+    }),
   // Get attendance for a specific session
   getSessionAttendance: teacherProcedure
     .input(z.object({ sessionId: z.string() }))

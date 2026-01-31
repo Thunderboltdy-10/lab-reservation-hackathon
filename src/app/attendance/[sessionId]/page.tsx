@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { api } from "@/trpc/react";
 import { Button } from "@/components/ui/button";
@@ -59,18 +59,21 @@ export default function SessionAttendancePage() {
     api.attendance.getSessionAttendance.useQuery(
       { sessionId },
       {
-        onSuccess: (data) => {
-          // Initialize local state with existing attendance
-          const initial: Record<string, AttendanceStatus> = {};
-          data.students.forEach((student) => {
-            if (student.attendance) {
-              initial[student.user.id] = student.attendance.status;
-            }
-          });
-          setLocalAttendance(initial);
-        },
+        refetchOnWindowFocus: false,
+        refetchOnReconnect: false,
       }
     );
+
+  useEffect(() => {
+    if (!attendanceData || hasChanges) return;
+    const initial: Record<string, AttendanceStatus> = {};
+    attendanceData.students.forEach((student) => {
+      if (student.attendance) {
+        initial[student.user.id] = student.attendance.status;
+      }
+    });
+    setLocalAttendance(initial);
+  }, [attendanceData, hasChanges]);
 
   const markBulkMutation = api.attendance.markBulkAttendance.useMutation();
 

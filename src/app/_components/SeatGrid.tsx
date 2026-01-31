@@ -32,7 +32,8 @@ interface SeatProps {
   occupantName?: string;
   onClick?: () => void;
   disabled?: boolean;
-  isTeacher?: boolean;
+  selectionActive?: boolean;
+  className?: string;
 }
 
 const Seat = ({
@@ -43,14 +44,19 @@ const Seat = ({
   occupantName,
   onClick,
   disabled,
-  isTeacher,
+  selectionActive = true,
+  className,
 }: SeatProps) => {
   const getSeatColor = () => {
+    // When no session is selected - gray, visible, no interaction styling
+    if (!selectionActive && !isOccupied && !isUserSeat && !isPending) {
+      return "bg-muted/70 text-muted-foreground border border-border/60";
+    }
     if (isPending) {
       return "bg-amber-500 hover:bg-amber-600 text-white"; // Pending approval
     }
     if (isUserSeat) {
-      return "bg-yellow-400 hover:bg-yellow-500 text-yellow-900"; // Your booking
+      return "bg-sky-500 hover:bg-sky-600 text-white"; // Your booking - distinct from pending
     }
     if (isOccupied) {
       return "bg-destructive hover:bg-destructive/90 text-destructive-foreground"; // Occupied
@@ -58,15 +64,23 @@ const Seat = ({
     return "bg-primary hover:bg-primary/90 text-primary-foreground"; // Available
   };
 
+  // Completely disable interaction when no session selected (non-teacher)
+  const isClickable = selectionActive && !disabled;
+
   return (
     <button
-      onClick={onClick}
-      disabled={disabled}
+      type="button"
+      onClick={isClickable ? onClick : undefined}
+      disabled={!isClickable}
+      tabIndex={isClickable ? 0 : -1}
+      aria-disabled={!isClickable}
       className={cn(
-        "flex h-12 w-12 flex-col items-center justify-center rounded-lg font-semibold text-sm transition-all duration-150",
+        "flex h-16 min-w-[84px] flex-col items-center justify-center rounded-lg font-semibold text-sm",
+        "transition-all duration-300 ease-out",
         getSeatColor(),
-        disabled && "cursor-not-allowed opacity-50",
-        !disabled && "cursor-pointer shadow-md hover:scale-105 hover:shadow-lg"
+        (!isClickable || disabled) && "cursor-default pointer-events-none shadow-none",
+        isClickable && "cursor-pointer shadow-md hover:shadow-lg",
+        className
       )}
       title={
         occupantName
@@ -74,9 +88,9 @@ const Seat = ({
           : name
       }
     >
-      <span className="text-xs font-bold">{name}</span>
+      <span className="text-base font-bold">{name}</span>
       {isOccupied && occupantName && (
-        <span className="max-w-[40px] truncate text-[8px] opacity-80">
+        <span className="max-w-[72px] truncate text-[11px] opacity-90">
           {occupantName.split(" ")[0]}
         </span>
       )}
@@ -101,8 +115,10 @@ interface SeatGridProps {
   currentUserId: string | null | undefined;
   onSeatClick: (seatName: string, isOccupied: boolean, isUserSeat: boolean) => void;
   disabled?: boolean;
-  isTeacher?: boolean;
   showLegend?: boolean;
+  screenSide?: "left" | "right";
+  selectionActive?: boolean;
+  showCapacity?: boolean;
 }
 
 const SeatGrid = ({
@@ -111,8 +127,10 @@ const SeatGrid = ({
   currentUserId,
   onSeatClick,
   disabled = false,
-  isTeacher = false,
   showLegend = true,
+  screenSide = "left",
+  selectionActive = true,
+  showCapacity = true,
 }: SeatGridProps) => {
   // Create a map for quick lookup of occupied seats
   const occupiedSeatMap = useMemo(() => {
@@ -146,14 +164,15 @@ const SeatGrid = ({
           occupantName={occupantName}
           onClick={() => onSeatClick(seatName, isOccupied, isUserSeat)}
           disabled={disabled}
-          isTeacher={isTeacher}
+          selectionActive={selectionActive}
+          className="flex-1"
         />
       );
     }
     return seats;
   };
 
-  // Render edge seat if configured
+  // Render edge seat if configured - height matches rows A+B + gap
   const renderEdgeSeat = () => {
     if (!config.edgeSeat) return null;
 
@@ -166,22 +185,39 @@ const SeatGrid = ({
       ? `${seatInfo.user.firstName} ${seatInfo.user.lastName}`
       : undefined;
 
+    const isClickable = selectionActive && !disabled;
+
     return (
-      <div className="mt-4 flex justify-center">
-        <div className="flex flex-col items-center gap-1">
-          <span className="text-muted-foreground text-xs">Edge</span>
-          <Seat
-            name="Edge"
-            isOccupied={isOccupied}
-            isUserSeat={isUserSeat}
-            isPending={isPending}
-            occupantName={occupantName}
-            onClick={() => onSeatClick(seatName, isOccupied, isUserSeat)}
-            disabled={disabled}
-            isTeacher={isTeacher}
-          />
-        </div>
-      </div>
+      <button
+        type="button"
+        onClick={isClickable ? () => onSeatClick(seatName, isOccupied, isUserSeat) : undefined}
+        disabled={!isClickable}
+        tabIndex={isClickable ? 0 : -1}
+        aria-disabled={!isClickable}
+        className={cn(
+          "flex h-[140px] w-24 flex-col items-center justify-center rounded-lg font-semibold text-sm",
+          "transition-all duration-300 ease-out",
+          !selectionActive && !isOccupied && !isUserSeat && !isPending
+            ? "bg-muted/70 text-muted-foreground border border-border/60"
+            : isPending
+            ? "bg-amber-500 hover:bg-amber-600 text-white"
+            : isUserSeat
+            ? "bg-sky-500 hover:bg-sky-600 text-white"
+            : isOccupied
+            ? "bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+            : "bg-primary hover:bg-primary/90 text-primary-foreground",
+          (!isClickable || disabled) && "cursor-default pointer-events-none shadow-none",
+          isClickable && "cursor-pointer shadow-md hover:shadow-lg"
+        )}
+        title={occupantName ? `${seatName} - ${occupantName}${isPending ? " (Pending)" : ""}` : seatName}
+      >
+        <span className="text-base font-bold">{seatName}</span>
+        {isOccupied && occupantName && (
+          <span className="max-w-[72px] truncate text-[11px] opacity-90">
+            {occupantName.split(" ")[0]}
+          </span>
+        )}
+      </button>
     );
   };
 
@@ -191,29 +227,67 @@ const SeatGrid = ({
     (config.edgeSeat ? 1 : 0);
   const occupiedCount = occupiedSeats.length;
 
+  const [rowA, rowB, ...remainingRows] = config.rows;
+  const edgeSeat = renderEdgeSeat();
+  const edgeOnLeft = screenSide === "right";
+
+  // Screen/Door column
+  const ScreenDoorColumn = () => (
+    <div className={cn(
+      "flex flex-col justify-between gap-4 shrink-0",
+      screenSide === "left" ? "items-start" : "items-end"
+    )}>
+      <div className="flex h-40 w-16 items-center justify-center rounded-xl border border-border/60 bg-muted/50 text-muted-foreground text-[11px] uppercase tracking-wide font-medium">
+        Screen
+      </div>
+      <div className="flex h-10 w-16 items-center justify-center rounded-md border border-border/60 bg-muted/30 text-[10px] text-muted-foreground">
+        Door
+      </div>
+    </div>
+  );
+
   return (
-    <div className="flex flex-col items-center gap-4">
-      {/* Screen/Board indicator */}
-      <div className="mb-2 rounded-lg bg-muted px-8 py-2 text-muted-foreground text-sm">
-        Screen / Whiteboard
-      </div>
+    <div className="flex w-full flex-col items-stretch">
+      {/* Main grid */}
+      <div className="w-full flex gap-5 items-stretch">
+        {screenSide === "left" && <ScreenDoorColumn />}
 
-      {/* Seat grid */}
-      <div className="flex flex-col gap-4">
-        {config.rows.map((rowConfig, index) => (
-          <div key={rowConfig.name} className="flex flex-col items-center gap-1">
-            <span className="text-muted-foreground text-xs">
-              Row {rowConfig.name}
-            </span>
-            <div className="flex gap-2">{renderRow(rowConfig, index)}</div>
+        <div className="flex-1 flex flex-col gap-4">
+          {/* Rows A and B with edge seat */}
+          <div className="flex items-center gap-4">
+            {edgeOnLeft && edgeSeat && (
+              <div className="shrink-0">{edgeSeat}</div>
+            )}
+            <div className="flex-1 flex flex-col gap-3">
+              {rowA && <div className="flex gap-3">{renderRow(rowA, 0)}</div>}
+              {rowB && <div className="flex gap-3">{renderRow(rowB, 1)}</div>}
+            </div>
+            {!edgeOnLeft && edgeSeat && (
+              <div className="shrink-0">{edgeSeat}</div>
+            )}
           </div>
-        ))}
-        {renderEdgeSeat()}
+
+          {/* Remaining rows */}
+          {remainingRows.length > 0 && (
+            <div className="flex flex-col gap-3 mt-3 pt-4 border-t border-border/40">
+              {remainingRows.map((rowConfig, index) => (
+                <div key={rowConfig.name} className="flex gap-3">
+                  {renderRow(rowConfig, index + 2)}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {screenSide === "right" && <ScreenDoorColumn />}
       </div>
 
-      {/* Legend */}
-      {showLegend && (
-        <div className="mt-4 flex flex-wrap justify-center gap-4 text-sm">
+      {/* Legend - only shows when session is selected, with animation */}
+      <div className={cn(
+        "overflow-hidden transition-all duration-300 ease-out",
+        showLegend ? "max-h-24 opacity-100 mt-4" : "max-h-0 opacity-0 mt-0"
+      )}>
+        <div className="flex flex-wrap justify-center gap-4 text-sm">
           <div className="flex items-center gap-2">
             <div className="h-4 w-4 rounded bg-primary"></div>
             <span className="text-muted-foreground">Available</span>
@@ -223,18 +297,21 @@ const SeatGrid = ({
             <span className="text-muted-foreground">Occupied</span>
           </div>
           <div className="flex items-center gap-2">
-            <div className="h-4 w-4 rounded bg-yellow-400"></div>
+            <div className="h-4 w-4 rounded bg-sky-500"></div>
             <span className="text-muted-foreground">Your Booking</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="h-4 w-4 rounded bg-amber-500"></div>
-            <span className="text-muted-foreground">Pending Approval</span>
+            <span className="text-muted-foreground">Pending</span>
           </div>
         </div>
-      )}
+      </div>
 
-      {/* Capacity indicator */}
-      <div className="text-muted-foreground text-sm">
+      {/* Capacity indicator - only shows when session is selected */}
+      <div className={cn(
+        "text-muted-foreground text-sm transition-all duration-300 ease-out",
+        showCapacity ? "opacity-100 mt-2" : "opacity-0 mt-0 h-0"
+      )}>
         {occupiedCount} / {totalSeats} seats occupied
       </div>
     </div>
@@ -254,6 +331,11 @@ export const parseLabConfig = (configJson: string | null | undefined): LabConfig
   } catch {
     return DEFAULT_LAB_CONFIG;
   }
+};
+
+export const getTotalSeats = (config: LabConfig) => {
+  const base = config.rows.reduce((acc, row) => acc + row.seats, 0);
+  return base + (config.edgeSeat ? 1 : 0);
 };
 
 export default SeatGrid;

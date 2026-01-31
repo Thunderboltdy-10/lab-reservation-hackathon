@@ -6,19 +6,21 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import type { LabConfig, RowConfig } from "./SeatGrid";
+import type { LabConfig } from "./SeatGrid";
 import { DEFAULT_LAB_CONFIG } from "./SeatGrid";
 
 interface SeatConfigSliderProps {
   initialConfig?: LabConfig;
   onSave: (config: LabConfig) => void;
   onCancel?: () => void;
+  screenSide?: "left" | "right";
 }
 
 const SeatConfigSlider = ({
   initialConfig = DEFAULT_LAB_CONFIG,
   onSave,
   onCancel,
+  screenSide = "left",
 }: SeatConfigSliderProps) => {
   const [config, setConfig] = useState<LabConfig>(initialConfig);
 
@@ -39,20 +41,6 @@ const SeatConfigSlider = ({
     setConfig({ ...config, edgeSeat: !config.edgeSeat });
   };
 
-  const addRow = () => {
-    const nextRowName = String.fromCharCode(
-      65 + config.rows.length // A = 65, B = 66, etc.
-    );
-    const newRows: RowConfig[] = [...config.rows, { name: nextRowName, seats: 6 }];
-    setConfig({ ...config, rows: newRows });
-  };
-
-  const removeRow = (index: number) => {
-    if (config.rows.length <= 1) return; // Keep at least one row
-    const newRows = config.rows.filter((_, i) => i !== index);
-    setConfig({ ...config, rows: newRows });
-  };
-
   // Calculate total seats for preview
   const totalSeats =
     config.rows.reduce((acc, row) => acc + row.seats, 0) +
@@ -60,29 +48,89 @@ const SeatConfigSlider = ({
 
   // Preview render
   const renderPreview = () => {
-    return (
-      <div className="flex flex-col items-center gap-2">
-        <div className="mb-2 rounded bg-muted px-4 py-1 text-muted-foreground text-xs">
+    const screenCol = (
+      <div className="flex flex-col justify-between gap-3 shrink-0">
+        <div className="flex h-28 w-14 items-center justify-center rounded-lg bg-muted/60 border border-border/50 text-[9px] text-muted-foreground uppercase">
           Screen
         </div>
-        {config.rows.map((row) => (
-          <div key={row.name} className="flex gap-1">
-            {Array.from({ length: row.seats }).map((_, i) => (
-              <div
-                key={i}
-                className="flex h-6 w-6 items-center justify-center rounded bg-primary/20 text-[10px] text-primary"
-              >
-                {row.name}
-                {i + 1}
+        <div className="flex h-8 w-14 items-center justify-center rounded bg-muted/40 border border-border/40 text-[8px] text-muted-foreground">
+          Door
+        </div>
+      </div>
+    );
+
+    const seatsCol = (
+      <div className="flex flex-col gap-2 flex-1">
+        <div className="flex items-center gap-2">
+          {screenSide === "right" && config.edgeSeat && (
+            <div className="flex h-[88px] w-14 items-center justify-center rounded bg-primary/20 text-[9px] text-primary shrink-0">
+              Edge
+            </div>
+          )}
+          <div className="flex flex-col gap-1 flex-1">
+            {/* Row A */}
+            {config.rows[0] && (
+              <div className="flex gap-1">
+                {Array.from({ length: config.rows[0].seats }).map((_, i) => (
+                  <div
+                    key={i}
+                    className="flex h-10 flex-1 items-center justify-center rounded bg-primary/20 text-[9px] text-primary"
+                  >
+                    {config.rows[0]?.name}
+                    {i + 1}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Row B */}
+            {config.rows[1] && (
+              <div className="flex gap-1">
+                {Array.from({ length: config.rows[1].seats }).map((_, i) => (
+                  <div
+                    key={i}
+                    className="flex h-10 flex-1 items-center justify-center rounded bg-primary/20 text-[9px] text-primary"
+                  >
+                    {config.rows[1]?.name}
+                    {i + 1}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          {screenSide === "left" && config.edgeSeat && (
+            <div className="flex h-[88px] w-14 items-center justify-center rounded bg-primary/20 text-[9px] text-primary shrink-0">
+              Edge
+            </div>
+          )}
+        </div>
+
+        {/* Remaining rows (C, D, etc.) */}
+        {config.rows.length > 2 && (
+          <div className="flex flex-col gap-1 mt-1 pt-2 border-t border-border/40">
+            {config.rows.slice(2).map((row) => (
+              <div key={row.name} className="flex gap-1">
+                {Array.from({ length: row.seats }).map((_, i) => (
+                  <div
+                    key={i}
+                    className="flex h-10 flex-1 items-center justify-center rounded bg-primary/20 text-[9px] text-primary"
+                  >
+                    {row.name}
+                    {i + 1}
+                  </div>
+                ))}
               </div>
             ))}
           </div>
-        ))}
-        {config.edgeSeat && (
-          <div className="mt-2 flex h-6 w-6 items-center justify-center rounded bg-primary/20 text-[10px] text-primary">
-            E
-          </div>
         )}
+      </div>
+    );
+
+    return (
+      <div className="flex gap-3 items-stretch">
+        {screenSide === "left" && screenCol}
+        {seatsCol}
+        {screenSide === "right" && screenCol}
       </div>
     );
   };
@@ -97,14 +145,6 @@ const SeatConfigSlider = ({
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <Label className="font-medium text-sm">Rows</Label>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={addRow}
-              disabled={config.rows.length >= 10}
-            >
-              + Add Row
-            </Button>
           </div>
 
           {config.rows.map((row, index) => (
@@ -113,16 +153,6 @@ const SeatConfigSlider = ({
                 <Label className="text-muted-foreground text-sm">
                   Row {row.name}: {row.seats} seats
                 </Label>
-                {config.rows.length > 1 && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => removeRow(index)}
-                    className="h-6 px-2 text-destructive text-xs"
-                  >
-                    Remove
-                  </Button>
-                )}
               </div>
               <Slider.Root
                 className="relative flex h-5 w-full touch-none items-center select-none"
@@ -166,7 +196,7 @@ const SeatConfigSlider = ({
         {/* Preview */}
         <div className="space-y-2">
           <Label className="font-medium text-sm">Preview</Label>
-          <div className="rounded-lg border bg-card p-4">
+          <div className="mt-2 p-3 bg-muted/20 rounded-lg border border-border/40">
             {renderPreview()}
             <div className="mt-2 text-center text-muted-foreground text-xs">
               Total: {totalSeats} seats
