@@ -1,11 +1,22 @@
-"use client"
-import Lab from '@/app/_components/lab'
-import React from 'react'
+"use client";
+import Lab from "@/app/_components/lab";
+import React from "react";
+import { api } from "@/trpc/react";
 
 const Physics = () => {
-    return (
-        <Lab isPhysics={true} isTeacher={true}/>
-    )
-}
+  const { data: account, isLoading } = api.account.getAccount.useQuery();
 
-export default Physics
+  if (isLoading) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <div className="animate-pulse text-muted-foreground">Loading...</div>
+      </div>
+    );
+  }
+
+  const isTeacher = account?.role === "TEACHER" || account?.role === "ADMIN";
+
+  return <Lab isPhysics={true} isTeacher={isTeacher} />;
+};
+
+export default Physics;
