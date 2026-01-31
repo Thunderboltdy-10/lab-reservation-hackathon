@@ -13,32 +13,54 @@ enum Role {
   ADMIN
 }
 
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  EXCUSED
+}
+
+enum BookingStatus {
+  CONFIRMED
+  PENDING_APPROVAL
+  REJECTED
+}
+
 model User {
   id        String   @id @default(cuid())
   email     String   @unique
   firstName String
-  lastName   String
+  lastName  String
   role      Role     @default(STUDENT)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  // relations
-  seatBookings  SeatBooking[]
-  sessions  Session[] @relation("TeacherSessions")
+  // Ban fields
+  isBanned  Boolean   @default(false)
+  bannedAt  DateTime?
+  bannedBy  String?
+  banReason String?
 
+  // relations
+  seatBookings      SeatBooking[]
+  sessions          Session[]          @relation("TeacherSessions")
   equipmentBookings EquipmentBooking[]
+  attendances       Attendance[]
+  markedAttendances Attendance[]       @relation("MarkedByUser")
 }
 
 model Lab {
-  id        String   @id @default(cuid())
-  name      String
-  capacity  Int      @default(10)
-  createdAt DateTime @default(now())
+  id          String   @id @default(cuid())
+  name        String
+  capacity    Int      @default(10)
+  createdAt   DateTime @default(now())
   description String?
 
-  seats    Seat[]
-  sessions Session[]
+  // Seat configuration as JSON
+  // Format: {"rows": [{"name": "A", "seats": 6}, {"name": "B", "seats": 6}, {"name": "C", "seats": 6}], "edgeSeat": true}
+  defaultRowConfig String?
 
+  seats     Seat[]
+  sessions  Session[]
   equipment Equipment[]
 }
 
@@ -51,46 +73,51 @@ model Seat {
   name      String
   createdAt DateTime @default(now())
 
+  // Whether this seat is currently active/available
+  isActive Boolean @default(true)
+
   seatBookings SeatBooking[]
 }
 
 model Session {
-  id          String    @id @default(cuid())
-  lab         Lab       @relation(fields: [labId], references: [id])
+  id          String   @id @default(cuid())
+  lab         Lab      @relation(fields: [labId], references: [id])
   labId       String
   startAt     DateTime
   endAt       DateTime
-  capacity    Int       // default to lab.capacity when creating
-  createdBy   User      @relation("TeacherSessions", fields: [createdById], references: [id])
+  capacity    Int // default to lab.capacity when creating
+  createdBy   User     @relation("TeacherSessions", fields: [createdById], references: [id])
   createdById String
-  createdAt   DateTime  @default(now())
+  createdAt   DateTime @default(now())
 
-  seatBookings    SeatBooking[] @relation("SessionSeatBookings")
-
-  @@index([startAt, endAt])
-  @@unique([labId, startAt, endAt])
-
-  sessionEquipment SessionEquipment[]
+  seatBookings      SeatBooking[]      @relation("SessionSeatBookings")
+  sessionEquipment  SessionEquipment[]
   equipmentBookings EquipmentBooking[]
+  attendances       Attendance[]
 
+  @@unique([labId, startAt, endAt])
+  @@index([startAt, endAt])
 }
 
 model SeatBooking {
-  id         String   @id @default(cuid())
-  seat       Seat     @relation(fields: [seatId], references: [id])
-  seatId     String
-  session    Session  @relation("SessionSeatBookings", fields: [sessionId], references: [id])
-  sessionId  String   // denormalized for easy uniqueness per session
-  createdAt  DateTime @default(now())
-  name       String   @default("A1")
+  id        String   @id @default(cuid())
+  seat      Seat     @relation(fields: [seatId], references: [id])
+  seatId    String
+  session   Session  @relation("SessionSeatBookings", fields: [sessionId], references: [id])
+  sessionId String // denormalized for easy uniqueness per session
+  createdAt DateTime @default(now())
+  name      String   @default("A1")
 
-  user        User          @relation(fields: [userId], references: [id])
-  userId      String
-  
-  @@unique([sessionId, userId]) // prevent duplicate bookings by same user for a session
-  @@unique([seatId, sessionId]) // seat cannot be assigned twice for same session
+  user   User   @relation(fields: [userId], references: [id])
+  userId String
+
+  // Booking status for approval workflow (banned students need approval)
+  status BookingStatus @default(CONFIRMED)
 
   equipmentBookings EquipmentBooking[]
+
+  @@unique([sessionId, userId]) // prevent duplicate bookings by same user for a session
+  @@unique([seatId, sessionId]) // seat cannot be assigned twice for same session
 }
 
 model Equipment {
@@ -103,38 +130,61 @@ model Equipment {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  // New fields
+  expirationDate DateTime?
+  createdBy      String?
+
   sessionAvailability SessionEquipment[]
   bookings            EquipmentBooking[]
 }
 
 model SessionEquipment {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   sessionId   String
-  session     Session  @relation(fields: [sessionId], references: [id])
+  session     Session   @relation(fields: [sessionId], references: [id])
   equipmentId String
   equipment   Equipment @relation(fields: [equipmentId], references: [id])
 
-  available   Int
-  reserved    Int      @default(0)
+  available Int
+  reserved  Int @default(0)
 
   @@unique([sessionId, equipmentId])
   @@index([sessionId, equipmentId])
 }
 
 model EquipmentBooking {
-  id            String   @id @default(cuid())
+  id            String       @id @default(cuid())
   userId        String
-  user          User     @relation(fields: [userId], references: [id])
+  user          User         @relation(fields: [userId], references: [id])
   sessionId     String
-  session       Session  @relation(fields: [sessionId], references: [id])
+  session       Session      @relation(fields: [sessionId], references: [id])
   equipmentId   String
-  equipment     Equipment @relation(fields: [equipmentId], references: [id])
-  seatBookingId String?   // optional
+  equipment     Equipment    @relation(fields: [equipmentId], references: [id])
+  seatBookingId String? // optional
   seatBooking   SeatBooking? @relation(fields: [seatBookingId], references: [id])
-  amount        Int      @default(1)
-  createdAt     DateTime @default(now())
+  amount        Int          @default(1)
+  createdAt     DateTime     @default(now())
+
+  // Usage reporting fields
+  actualUsed Int?
+  reportedAt DateTime?
 
   @@unique([userId, sessionId, equipmentId])
   @@index([sessionId, equipmentId])
 }
 
+model Attendance {
+  id           String           @id @default(cuid())
+  userId       String
+  user         User             @relation(fields: [userId], references: [id])
+  sessionId    String
+  session      Session          @relation(fields: [sessionId], references: [id])
+  status       AttendanceStatus @default(ABSENT)
+  markedBy     String?
+  markedByUser User?            @relation("MarkedByUser", fields: [markedBy], references: [id])
+  markedAt     DateTime         @default(now())
+  notes        String?
+
+  @@unique([userId, sessionId])
+  @@index([sessionId])
+}

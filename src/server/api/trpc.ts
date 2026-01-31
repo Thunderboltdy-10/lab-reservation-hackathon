@@ -6,12 +6,13 @@
  * TL;DR - This is where all the tRPC server stuff is created and plugged in. The pieces you will
  * need to use are documented accordingly near the end.
  */
-import { initTRPC } from "@trpc/server";
+import { initTRPC, TRPCError } from "@trpc/server";
 import superjson from "superjson";
 import { ZodError } from "zod";
 
 import { db } from "@/server/db";
 import { auth } from "@clerk/nextjs/server";
+import type { Role } from "@prisma/client";
 
 /**
  * 1. CONTEXT
@@ -99,16 +100,99 @@ const timingMiddleware = t.middleware(async ({ next, path }) => {
 	return result;
 });
 
-const isAuthed = t.middleware(({next, ctx}) => {
-    if (!ctx.auth?.userId) {
-        throw new Error("Unauthorised")
-    } return next({
-        ctx: {
-            ...ctx,
-            auth: ctx.auth as Required<typeof ctx.auth>
-        }
-    })
-})
+const isAuthed = t.middleware(({ next, ctx }) => {
+  if (!ctx.auth?.userId) {
+    throw new TRPCError({
+      code: "UNAUTHORIZED",
+      message: "You must be logged in to access this resource",
+    });
+  }
+  return next({
+    ctx: {
+      ...ctx,
+      auth: ctx.auth as Required<typeof ctx.auth>,
+    },
+  });
+});
+
+/**
+ * Middleware that checks if the user has TEACHER or ADMIN role
+ */
+const isTeacherOrAdmin = t.middleware(async ({ next, ctx }) => {
+  if (!ctx.auth?.userId) {
+    throw new TRPCError({
+      code: "UNAUTHORIZED",
+      message: "You must be logged in to access this resource",
+    });
+  }
+
+  const user = await ctx.db.user.findUnique({
+    where: { id: ctx.auth.userId },
+    select: { role: true },
+  });
+
+  if (!user) {
+    throw new TRPCError({
+      code: "NOT_FOUND",
+      message: "User not found",
+    });
+  }
+
+  const allowedRoles: Role[] = ["TEACHER", "ADMIN"];
+  if (!allowedRoles.includes(user.role)) {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "You must be a teacher or admin to access this resource",
+    });
+  }
+
+  return next({
+    ctx: {
+      ...ctx,
+      auth: ctx.auth as Required<typeof ctx.auth>,
+      userRole: user.role,
+    },
+  });
+});
+
+/**
+ * Middleware that checks if the user has ADMIN role only
+ */
+const isAdmin = t.middleware(async ({ next, ctx }) => {
+  if (!ctx.auth?.userId) {
+    throw new TRPCError({
+      code: "UNAUTHORIZED",
+      message: "You must be logged in to access this resource",
+    });
+  }
+
+  const user = await ctx.db.user.findUnique({
+    where: { id: ctx.auth.userId },
+    select: { role: true },
+  });
+
+  if (!user) {
+    throw new TRPCError({
+      code: "NOT_FOUND",
+      message: "User not found",
+    });
+  }
+
+  if (user.role !== "ADMIN") {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "You must be an admin to access this resource",
+    });
+  }
+
+  return next({
+    ctx: {
+      ...ctx,
+      auth: ctx.auth as Required<typeof ctx.auth>,
+      userRole: user.role,
+    },
+  });
+});
 
 /**
  * Public (unauthenticated) procedure
@@ -118,4 +202,16 @@ const isAuthed = t.middleware(({next, ctx}) => {
  * are logged in.
  */
 export const publicProcedure = t.procedure.use(timingMiddleware);
-export const privateProcedure = t.procedure.use(isAuthed)
+export const privateProcedure = t.procedure.use(isAuthed);
+
+/**
+ * Teacher procedure - requires TEACHER or ADMIN role
+ * Use this for operations that teachers need to perform (creating sessions, managing equipment, etc.)
+ */
+export const teacherProcedure = t.procedure.use(isTeacherOrAdmin);
+
+/**
+ * Admin procedure - requires ADMIN role only
+ * Use this for sensitive operations (managing user roles, deleting accounts, etc.)
+ */
+export const adminProcedure = t.procedure.use(isAdmin);
