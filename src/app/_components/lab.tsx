@@ -456,8 +456,8 @@ const Lab = ({ isPhysics, isTeacher }: { isPhysics: boolean, isTeacher: boolean 
             setPendingSeat(null)
             setTemplateVisible(false)
             setNotes("")
-            setBookingEquipmentDraft([])
-            setSessionEquipmentDraft([])
+            // setBookingEquipmentDraft([]) - Managed by init effect
+            // setSessionEquipmentDraft([]) - Managed by init effect
 
             setInitialNotes("")
             setInitialBookingEquipment([])

@@ -315,7 +315,7 @@ export default function DashboardPage() {
                   Today&apos;s Sessions
                 </CardTitle>
                 <CardDescription>
-                  {todaySessions?.length ?? 0} sessions scheduled
+                  {todaySessions?.filter((session) => new Date(session.startAt) >= new Date()).length ?? 0} sessions scheduled
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">

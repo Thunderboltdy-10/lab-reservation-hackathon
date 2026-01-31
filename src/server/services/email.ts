@@ -155,6 +155,16 @@ export const sendTeacherSummaryEmail = async (
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
   const attendanceUrl = `${appUrl}/attendance/${sessionDetails.sessionId}`;
 
+  const escapeHtml = (text: string | null | undefined) => {
+    if (!text) return "";
+    return text
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  };
+
   const studentRows = sessionDetails.students
     .map(
       (s) =>
@@ -163,7 +173,7 @@ export const sendTeacherSummaryEmail = async (
             <td style="padding: 8px; border-bottom: 1px solid #eee;">${s.seatName}</td>
             <td style="padding: 8px; border-bottom: 1px solid #eee;">${s.equipment?.map((e) => `${e.name} (x${e.amount})`).join(", ") ?? "-"
         }</td>
-            <td style="padding: 8px; border-bottom: 1px solid #eee; font-style: italic; color: #666;">${s.notes || "-"}</td>
+            <td style="padding: 8px; border-bottom: 1px solid #eee; font-style: italic; color: #666;">${escapeHtml(s.notes) || "-"}</td>
           </tr>`
     )
     .join("");

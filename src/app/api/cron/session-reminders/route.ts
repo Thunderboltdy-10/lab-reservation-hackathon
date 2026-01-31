@@ -37,6 +37,8 @@ export async function GET(request: Request) {
 
     // Send student reminders (3 hours before)
     for (const session of studentReminders) {
+      let sessionHasErrors = false;
+
       for (const booking of session.seatBookings) {
         try {
           const equipment = booking.equipmentBookings.map((eb) => ({
@@ -57,16 +59,19 @@ export async function GET(request: Request) {
           );
           results.studentEmailsSent++;
         } catch (error) {
+          sessionHasErrors = true;
           results.errors.push(
             `Failed to send student reminder to ${booking.user.email}: ${error}`
           );
         }
       }
 
-      await db.session.update({
-        where: { id: session.id },
-        data: { studentReminderSentAt: new Date() },
-      });
+      if (!sessionHasErrors) {
+        await db.session.update({
+          where: { id: session.id },
+          data: { studentReminderSentAt: new Date() },
+        });
+      }
     }
 
     // Send teacher summaries (15 minutes before)

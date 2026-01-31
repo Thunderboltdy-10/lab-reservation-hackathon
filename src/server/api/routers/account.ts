@@ -508,6 +508,38 @@ export const accountRouter = createTRPCRouter({
       const rowName = seatPositionMatch?.[1]?.toUpperCase();
       const colNumber = seatPositionMatch ? Number(seatPositionMatch[2]) : null;
 
+      // Validate against lab config
+      const lab = await ctx.db.lab.findUnique({
+        where: { id: input.labId },
+        select: { defaultRowConfig: true },
+      });
+
+      if (lab?.defaultRowConfig) {
+        try {
+          const config = JSON.parse(lab.defaultRowConfig) as { rows: { name: string; seats: number }[]; edgeSeat: boolean };
+          let isValid = false;
+
+          if (input.name === "Edge") {
+            isValid = !!config.edgeSeat;
+          } else if (rowName && colNumber) {
+            const rowConfig = config.rows?.find(r => r.name.toUpperCase() === rowName);
+            if (rowConfig && colNumber <= rowConfig.seats) {
+              isValid = true;
+            }
+          }
+
+          if (!isValid) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: `Seat ${input.name} is not valid for this lab configuration.`
+            });
+          }
+        } catch (e) {
+          if (e instanceof TRPCError) throw e;
+          console.error("Failed to parse lab config for validation:", e);
+        }
+      }
+
       const booking = await ctx.db.$transaction(async (tx) => {
         // Check for 15-minute lockout
         const sessionCheck = await tx.session.findUnique({
@@ -850,6 +882,38 @@ export const accountRouter = createTRPCRouter({
       const rowName = seatPositionMatch?.[1]?.toUpperCase();
       const colNumber = seatPositionMatch ? Number(seatPositionMatch[2]) : null;
 
+      // Validate against lab config
+      const lab = await ctx.db.lab.findUnique({
+        where: { id: input.labId },
+        select: { defaultRowConfig: true },
+      });
+
+      if (lab?.defaultRowConfig) {
+        try {
+          const config = JSON.parse(lab.defaultRowConfig) as { rows: { name: string; seats: number }[]; edgeSeat: boolean };
+          let isValid = false;
+
+          if (input.newSeatName === "Edge") {
+            isValid = !!config.edgeSeat;
+          } else if (rowName && colNumber) {
+            const rowConfig = config.rows?.find(r => r.name.toUpperCase() === rowName);
+            if (rowConfig && colNumber <= rowConfig.seats) {
+              isValid = true;
+            }
+          }
+
+          if (!isValid) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: `Seat ${input.newSeatName} is not valid for this lab configuration.`
+            });
+          }
+        } catch (e) {
+          if (e instanceof TRPCError) throw e;
+          console.error("Failed to parse lab config for validation:", e);
+        }
+      }
+
       return await ctx.db.$transaction(async (tx) => {
         const booking = await tx.seatBooking.findFirst({
           where: {
@@ -934,6 +998,38 @@ export const accountRouter = createTRPCRouter({
       const seatPositionMatch = input.name.match(/^([A-Za-z]+)(\d+)$/);
       const rowName = seatPositionMatch?.[1]?.toUpperCase();
       const colNumber = seatPositionMatch ? Number(seatPositionMatch[2]) : null;
+
+      // Validate against lab config
+      const lab = await ctx.db.lab.findUnique({
+        where: { id: input.labId },
+        select: { defaultRowConfig: true },
+      });
+
+      if (lab?.defaultRowConfig) {
+        try {
+          const config = JSON.parse(lab.defaultRowConfig) as { rows: { name: string; seats: number }[]; edgeSeat: boolean };
+          let isValid = false;
+
+          if (input.name === "Edge") {
+            isValid = !!config.edgeSeat;
+          } else if (rowName && colNumber) {
+            const rowConfig = config.rows?.find(r => r.name.toUpperCase() === rowName);
+            if (rowConfig && colNumber <= rowConfig.seats) {
+              isValid = true;
+            }
+          }
+
+          if (!isValid) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: `Seat ${input.name} is not valid for this lab configuration.`
+            });
+          }
+        } catch (e) {
+          if (e instanceof TRPCError) throw e;
+          console.error("Failed to parse lab config for validation:", e);
+        }
+      }
 
       const booking = await ctx.db.$transaction(async (tx) => {
         // Check for 15-minute lockout
@@ -1154,10 +1250,15 @@ export const accountRouter = createTRPCRouter({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const parsed = JSON.parse(input.config) as {
-        rows?: { name: string; seats: number }[];
-        edgeSeat?: boolean;
-      };
+      let parsed: { rows?: { name: string; seats: number }[]; edgeSeat?: boolean };
+      try {
+        parsed = JSON.parse(input.config);
+      } catch (e) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Invalid configuration format (JSON parse failed)",
+        });
+      }
 
       // Check for conflicts with existing future bookings
       if (parsed?.rows && Array.isArray(parsed.rows)) {
