@@ -69,13 +69,18 @@ export function TRPCReactProvider(props: { children: React.ReactNode }) {
   useEffect(() => {
     if (!isLoaded) return;
 
-    // Only invalidate if userId actually changed (not on initial load)
-    if (previousUserIdRef.current !== undefined && previousUserIdRef.current !== userId) {
-      // Clear all cached data when user changes
-      queryClient.clear();
-    }
+    const handleAuthChange = async () => {
+      if (
+        previousUserIdRef.current !== undefined &&
+        previousUserIdRef.current !== userId
+      ) {
+        await queryClient.cancelQueries();
+        queryClient.clear();
+      }
+      previousUserIdRef.current = userId;
+    };
 
-    previousUserIdRef.current = userId;
+    void handleAuthChange();
   }, [userId, isLoaded, queryClient]);
 
   return (

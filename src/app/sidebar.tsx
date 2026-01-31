@@ -124,15 +124,21 @@ function MobileNav({ role }: { role: string | undefined }) {
       </SheetTrigger>
       <SheetContent side="left" className="w-72 p-0">
         <SheetHeader className="border-b p-4">
-          <SheetTitle className="flex items-center gap-2">
+          <SheetTitle className="flex flex-col items-center gap-2 text-center">
             <Image
               src="/logo.png"
               alt="TGC"
-              width={32}
-              height={32}
-              className="rounded"
+              width={84}
+              height={84}
+              className="rounded-md"
+              priority
             />
-            <span className="font-semibold">TGC Labs</span>
+            <div>
+              <div className="font-semibold text-lg">TGC Labs</div>
+              <div className="text-muted-foreground text-xs">
+                Lab Reservation
+              </div>
+            </div>
           </SheetTitle>
         </SheetHeader>
         <nav className="flex flex-col gap-1 p-4">
@@ -145,11 +151,10 @@ function MobileNav({ role }: { role: string | undefined }) {
                 <Collapsible key={item.title} defaultOpen={isActive}>
                   <CollapsibleTrigger asChild>
                     <button
-                      className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm transition-colors ${
-                        isActive
-                          ? "bg-primary text-primary-foreground"
-                          : "hover:bg-muted"
-                      }`}
+                      className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm transition-colors ${isActive
+                        ? "bg-primary text-primary-foreground"
+                        : "hover:bg-muted"
+                        }`}
                     >
                       <span className="flex items-center gap-2">
                         <item.icon className="h-4 w-4" />
@@ -167,11 +172,10 @@ function MobileNav({ role }: { role: string | undefined }) {
                           key={child.url}
                           href={child.url}
                           onClick={() => setOpen(false)}
-                          className={`block rounded-lg px-3 py-2 text-sm transition-colors ${
-                            childActive
-                              ? "bg-primary text-primary-foreground"
-                              : "hover:bg-muted"
-                          }`}
+                          className={`block rounded-lg px-3 py-2 text-sm transition-colors ${childActive
+                            ? "bg-primary text-primary-foreground"
+                            : "hover:bg-muted"
+                            }`}
                         >
                           {child.title}
                         </Link>
@@ -187,11 +191,10 @@ function MobileNav({ role }: { role: string | undefined }) {
                 key={item.url}
                 href={item.url}
                 onClick={() => setOpen(false)}
-                className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors ${
-                  isActive
-                    ? "bg-primary text-primary-foreground"
-                    : "hover:bg-muted"
-                }`}
+                className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors ${isActive
+                  ? "bg-primary text-primary-foreground"
+                  : "hover:bg-muted"
+                  }`}
               >
                 <item.icon className="h-4 w-4" />
                 {item.title}
@@ -225,6 +228,11 @@ export function AppSidebar() {
   const { theme, setTheme } = useTheme();
   const [currentTab, setCurrentTab] = useState<string>("");
   const [isMobile, setIsMobile] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const { data } = api.account.getAccount.useQuery();
 
@@ -264,17 +272,33 @@ export function AppSidebar() {
     <Sidebar collapsible="icon">
       <SidebarContent>
         <SidebarHeader>
-          <div className="mt-2 flex items-center">
-            {state === "expanded" && (
-              <div className="ml-2 flex items-center gap-2">
+          <div className="mt-2 flex items-start">
+            {state === "expanded" ? (
+              <div className="ml-2 flex flex-1 flex-col items-center gap-2 text-center">
                 <Image
                   src="/logo.png"
                   alt="TGC"
-                  width={32}
-                  height={32}
-                  className="rounded"
+                  width={150}
+                  height={150}
+                  className="rounded-md dark:brightness-[5] dark:grayscale"
+                  priority
                 />
-                <h1 className="font-semibold text-lg">TGC Labs</h1>
+                <div>
+                  <div className="font-semibold text-lg">TGC Labs</div>
+                  <div className="text-muted-foreground text-xs">
+                    Lab Reservation
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="ml-2 flex items-center">
+                <Image
+                  src="/logo.png"
+                  alt="TGC"
+                  width={60}
+                  height={60}
+                  className="rounded-md dark:brightness-[5] dark:grayscale"
+                />
               </div>
             )}
             <div className="ml-auto">
@@ -295,11 +319,10 @@ export function AppSidebar() {
                       <>
                         <SidebarMenuButton
                           asChild
-                          className={`rounded-lg transition-colors ${
-                            item.url === currentTab
-                              ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                              : ""
-                          }`}
+                          className={`rounded-lg transition-colors ${item.url === currentTab
+                            ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                            : ""
+                            }`}
                         >
                           <div className="flex justify-between">
                             <Link href={item.url} className="flex items-center">
@@ -324,11 +347,10 @@ export function AppSidebar() {
                                 <SidebarMenuSubItem>
                                   <SidebarMenuButton
                                     asChild
-                                    className={`rounded-lg transition-colors ${
-                                      child.url === currentTab
-                                        ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                                        : ""
-                                    }`}
+                                    className={`rounded-lg transition-colors ${child.url === currentTab
+                                      ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                                      : ""
+                                      }`}
                                   >
                                     <Link href={child.url}>
                                       <span>{child.title}</span>
@@ -343,11 +365,10 @@ export function AppSidebar() {
                     ) : (
                       <SidebarMenuButton
                         asChild
-                        className={`rounded-lg transition-colors ${
-                          item.url === currentTab
-                            ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                            : ""
-                        }`}
+                        className={`rounded-lg transition-colors ${item.url === currentTab
+                          ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                          : ""
+                          }`}
                       >
                         <Link href={item.url}>
                           <item.icon className="h-4 w-4 flex-shrink-0" />
@@ -374,15 +395,15 @@ export function AppSidebar() {
             {state === "expanded" ? (
               <>
                 <Separator />
-                <div className="mx-4 flex items-center justify-between py-2">
+                <div className="flex items-center justify-start gap-3 px-4 py-2">
                   <UserButton />
                   <Button
                     variant="ghost"
                     size="icon"
                     onClick={() => setTheme(theme === "light" ? "dark" : "light")}
-                    className="transition-transform hover:scale-105"
+                    className="ml-auto transition-transform hover:scale-105"
                   >
-                    {theme === "light" ? (
+                    {!mounted ? <MoonIcon className="h-5 w-5" /> : theme === "light" ? (
                       <MoonIcon className="h-5 w-5" />
                     ) : (
                       <SunIcon className="h-5 w-5" />
@@ -393,13 +414,13 @@ export function AppSidebar() {
             ) : (
               <>
                 <Separator />
-                <div className="flex flex-col items-center gap-2 py-2">
+                <div className="flex flex-col items-start gap-2 px-2 py-2">
                   <Button
                     variant="ghost"
                     size="icon"
                     onClick={() => setTheme(theme === "light" ? "dark" : "light")}
                   >
-                    {theme === "light" ? (
+                    {!mounted ? <MoonIcon className="h-5 w-5" /> : theme === "light" ? (
                       <MoonIcon className="h-5 w-5" />
                     ) : (
                       <SunIcon className="h-5 w-5" />

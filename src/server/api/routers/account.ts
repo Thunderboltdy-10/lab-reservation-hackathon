@@ -7,6 +7,26 @@ import {
 } from "../trpc";
 import z from "zod";
 import { TRPCError } from "@trpc/server";
+import {
+  sendBookingConfirmationEmail,
+  sendBookingStatusEmail,
+  sendTeacherBookingRequestEmail,
+} from "@/server/services/email";
+
+const getTotalSeatsFromConfig = (configJson?: string | null) => {
+  if (!configJson) return 0;
+  try {
+    const parsed = JSON.parse(configJson) as {
+      rows?: { name: string; seats: number }[];
+      edgeSeat?: boolean;
+    };
+    if (!parsed?.rows || !Array.isArray(parsed.rows)) return 0;
+    const base = parsed.rows.reduce((acc, row) => acc + row.seats, 0);
+    return base + (parsed.edgeSeat ? 1 : 0);
+  } catch {
+    return 0;
+  }
+};
 
 export const authoriseAccountAccess = async (
   accountId: string,
@@ -95,6 +115,27 @@ export const accountRouter = createTRPCRouter({
       }
     }),
 
+  // Admin only - update account details (name + role)
+  updateAccountDetails: adminProcedure
+    .input(
+      z.object({
+        id: z.string(),
+        firstName: z.string().min(1),
+        lastName: z.string().min(1),
+        role: z.enum(["ADMIN", "TEACHER", "STUDENT"]),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      return await ctx.db.user.update({
+        where: { id: input.id },
+        data: {
+          firstName: input.firstName,
+          lastName: input.lastName,
+          role: input.role,
+        },
+      });
+    }),
+
   // Admin only - delete account
   deleteAccount: adminProcedure
     .input(
@@ -129,6 +170,7 @@ export const accountRouter = createTRPCRouter({
         },
         select: {
           id: true,
+          name: true,
           defaultRowConfig: true,
         },
       });
@@ -201,7 +243,9 @@ export const accountRouter = createTRPCRouter({
           createdBy: true,
           lab: {
             select: {
+              id: true,
               name: true,
+              defaultRowConfig: true,
             },
           },
         },
@@ -209,9 +253,23 @@ export const accountRouter = createTRPCRouter({
           startAt: "asc",
         },
       });
-
       if (sessions.length === 0) return [];
       return sessions;
+    }),
+
+  getSessionById: privateProcedure
+    .input(z.object({ sessionId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const session = await ctx.db.session.findUnique({
+        where: { id: input.sessionId },
+        select: {
+          id: true,
+          startAt: true,
+          endAt: true,
+          lab: { select: { name: true } },
+        },
+      });
+      return session;
     }),
 
   // Teacher/Admin - create session
@@ -224,6 +282,20 @@ export const accountRouter = createTRPCRouter({
       })
     )
     .mutation(async ({ ctx, input }) => {
+      if (input.endAt <= input.startAt) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "End time must be after the start time",
+        });
+      }
+
+      if (input.endAt.getTime() - input.startAt.getTime() < 5 * 60 * 1000) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Session must be at least 5 minutes long",
+        });
+      }
+
       const overlap = await ctx.db.session.findFirst({
         where: {
           labId: input.labId,
@@ -239,12 +311,24 @@ export const accountRouter = createTRPCRouter({
         });
       }
 
+      const lab = await ctx.db.lab.findUnique({
+        where: { id: input.labId },
+        select: { defaultRowConfig: true },
+      });
+      const totalSeats = getTotalSeatsFromConfig(lab?.defaultRowConfig);
+      if (totalSeats <= 0) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Lab seating configuration is invalid",
+        });
+      }
+
       return await ctx.db.session.create({
         data: {
           labId: input.labId,
           startAt: input.startAt,
           endAt: input.endAt,
-          capacity: 10,
+          capacity: totalSeats,
           createdById: ctx.auth.userId,
         },
       });
@@ -261,6 +345,20 @@ export const accountRouter = createTRPCRouter({
       })
     )
     .mutation(async ({ ctx, input }) => {
+      if (input.endAt <= input.startAt) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "End time must be after the start time",
+        });
+      }
+
+      if (input.endAt.getTime() - input.startAt.getTime() < 5 * 60 * 1000) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Session must be at least 5 minutes long",
+        });
+      }
+
       const overlap = await ctx.db.session.findFirst({
         where: {
           labId: input.labId,
@@ -377,6 +475,13 @@ export const accountRouter = createTRPCRouter({
           userId: true,
           name: true,
           status: true,
+          notes: true,
+          equipmentBookings: {
+            select: {
+              equipmentId: true,
+              amount: true,
+            },
+          },
           user: {
             select: {
               firstName: true,
@@ -395,50 +500,215 @@ export const accountRouter = createTRPCRouter({
         name: z.string(),
         sessionId: z.string(),
         labId: z.string(),
+        notes: z.string().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const seatId = await ctx.db.seat.findFirst({
-        where: {
-          labId: input.labId,
-          name: input.name,
-        },
-        select: {
-          id: true,
-        },
+      const seatPositionMatch = input.name.match(/^([A-Za-z]+)(\d+)$/);
+      const rowName = seatPositionMatch?.[1]?.toUpperCase();
+      const colNumber = seatPositionMatch ? Number(seatPositionMatch[2]) : null;
+
+      // Validate against lab config
+      const lab = await ctx.db.lab.findUnique({
+        where: { id: input.labId },
+        select: { defaultRowConfig: true },
       });
 
-      if (!seatId) throw new TRPCError({ code: "NOT_FOUND", message: "Seat not found" });
+      if (lab?.defaultRowConfig) {
+        try {
+          const config = JSON.parse(lab.defaultRowConfig) as { rows: { name: string; seats: number }[]; edgeSeat: boolean };
+          let isValid = false;
 
-      // Check if user is banned
-      const user = await ctx.db.user.findUnique({
-        where: { id: ctx.auth.userId },
-        select: { isBanned: true },
-      });
+          if (input.name === "Edge") {
+            isValid = !!config.edgeSeat;
+          } else if (rowName && colNumber) {
+            const rowConfig = config.rows?.find(r => r.name.toUpperCase() === rowName);
+            if (rowConfig && colNumber <= rowConfig.seats) {
+              isValid = true;
+            }
+          }
 
-      // Determine booking status based on ban status
-      const bookingStatus = user?.isBanned ? "PENDING_APPROVAL" : "CONFIRMED";
+          if (!isValid) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: `Seat ${input.name} is not valid for this lab configuration.`
+            });
+          }
+        } catch (e) {
+          if (e instanceof TRPCError) throw e;
+          console.error("Failed to parse lab config for validation:", e);
+        }
+      }
 
-      await ctx.db.session.updateMany({
-        where: {
-          id: input.sessionId,
-        },
-        data: {
-          capacity: {
-            decrement: 1,
+      const booking = await ctx.db.$transaction(async (tx) => {
+        // Check for 15-minute lockout and Lab ID validity
+        const sessionCheck = await tx.session.findUnique({
+          where: { id: input.sessionId },
+          select: { startAt: true, labId: true }
+        });
+
+        if (!sessionCheck) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Session not found" });
+        }
+
+        if (sessionCheck.labId !== input.labId) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Session does not belong to the specified lab"
+          });
+        }
+
+        const now = new Date();
+        const lockTime = new Date(sessionCheck.startAt.getTime() - 15 * 60 * 1000);
+        if (now > lockTime) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Bookings are locked 15 minutes before the session starts."
+          });
+        }
+
+        let seat = await tx.seat.findFirst({
+          where: {
+            labId: input.labId,
+            name: input.name,
           },
-        },
+          select: { id: true },
+        });
+
+        if (!seat) {
+          seat = await tx.seat.create({
+            data: {
+              labId: input.labId,
+              name: input.name,
+              row: rowName ? rowName.charCodeAt(0) - 64 : undefined,
+              col: colNumber ?? undefined,
+            },
+            select: { id: true },
+          });
+        }
+
+        const existingBooking = await tx.seatBooking.findFirst({
+          where: {
+            sessionId: input.sessionId,
+            userId: ctx.auth.userId,
+          },
+          select: { id: true },
+        });
+
+        if (existingBooking) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "You already have a booking for this session",
+          });
+        }
+
+        const seatTaken = await tx.seatBooking.findFirst({
+          where: {
+            sessionId: input.sessionId,
+            seatId: seat.id,
+          },
+          select: { id: true },
+        });
+
+        if (seatTaken) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Seat already booked for this session",
+          });
+        }
+
+        const user = await tx.user.findUnique({
+          where: { id: ctx.auth.userId },
+          select: { isBanned: true },
+        });
+
+        const bookingStatus = user?.isBanned ? "PENDING_APPROVAL" : "CONFIRMED";
+
+        const capacityUpdate = await tx.session.updateMany({
+          where: {
+            id: input.sessionId,
+            capacity: { gt: 0 },
+          },
+          data: {
+            capacity: { decrement: 1 },
+          },
+        });
+
+        if (capacityUpdate.count === 0) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Session is full",
+          });
+        }
+
+        return await tx.seatBooking.create({
+          data: {
+            sessionId: input.sessionId,
+            seatId: seat.id,
+            userId: ctx.auth.userId,
+            name: input.name,
+            status: bookingStatus,
+            notes: input.notes,
+          },
+        });
       });
 
-      return await ctx.db.seatBooking.create({
-        data: {
-          sessionId: input.sessionId,
-          seatId: seatId.id,
-          userId: ctx.auth.userId,
-          name: input.name,
-          status: bookingStatus,
-        },
-      });
+      try {
+        const bookingDetails = await ctx.db.seatBooking.findUnique({
+          where: { id: booking.id },
+          include: {
+            user: { select: { email: true, firstName: true, lastName: true } },
+            seat: { select: { name: true } },
+            session: {
+              include: {
+                lab: { select: { name: true } },
+                createdBy: { select: { email: true, firstName: true, lastName: true } },
+              },
+            },
+            equipmentBookings: {
+              include: { equipment: { select: { name: true } } },
+            },
+          },
+        });
+
+        if (!bookingDetails) {
+          return booking;
+        }
+
+        await sendBookingConfirmationEmail(
+          bookingDetails.user.email,
+          `${bookingDetails.user.firstName} ${bookingDetails.user.lastName}`,
+          {
+            labName: bookingDetails.session.lab.name,
+            seatName: bookingDetails.seat.name,
+            startAt: bookingDetails.session.startAt,
+            endAt: bookingDetails.session.endAt,
+            status: bookingDetails.status,
+            equipment: bookingDetails.equipmentBookings.map((eb) => ({
+              name: eb.equipment.name,
+              amount: eb.amount,
+            })),
+          }
+        );
+
+        if (bookingDetails.status === "PENDING_APPROVAL") {
+          await sendTeacherBookingRequestEmail(
+            bookingDetails.session.createdBy.email,
+            `${bookingDetails.session.createdBy.firstName} ${bookingDetails.session.createdBy.lastName}`,
+            {
+              studentName: `${bookingDetails.user.firstName} ${bookingDetails.user.lastName}`,
+              labName: bookingDetails.session.lab.name,
+              seatName: bookingDetails.seat.name,
+              startAt: bookingDetails.session.startAt,
+              endAt: bookingDetails.session.endAt,
+            }
+          );
+        }
+      } catch (error) {
+        console.error("Failed to send booking email:", error);
+      }
+
+      return booking;
     }),
 
   // Unbook a seat
@@ -464,7 +734,34 @@ export const accountRouter = createTRPCRouter({
 
       if (!seatId) throw new TRPCError({ code: "NOT_FOUND", message: "Seat not found" });
 
-      // Verify teacher role if isTeacher flag is set
+      const session = await ctx.db.session.findUnique({
+        where: { id: input.sessionId },
+        select: { startAt: true }
+      });
+
+      if (!session) throw new TRPCError({ code: "NOT_FOUND", message: "Session not found" });
+
+      // Check for 15-minute lockout if student
+      if (!input.isTeacher) {
+        const user = await ctx.db.user.findUnique({
+          where: { id: ctx.auth.userId },
+          select: { role: true }
+        });
+        const isAdmin = user?.role === "ADMIN";
+        const isTeacher = user?.role === "TEACHER";
+
+        if (!isAdmin && !isTeacher) {
+          const now = new Date();
+          const lockTime = new Date(session.startAt.getTime() - 15 * 60 * 1000);
+          if (now > lockTime) {
+            throw new TRPCError({
+              code: "FORBIDDEN",
+              message: "Bookings are locked 15 minutes before the session starts."
+            });
+          }
+        }
+      }
+
       if (input.isTeacher) {
         const user = await ctx.db.user.findUnique({
           where: { id: ctx.auth.userId },
@@ -479,24 +776,220 @@ export const accountRouter = createTRPCRouter({
         }
       }
 
-      await ctx.db.session.updateMany({
-        where: {
-          id: input.sessionId,
-        },
-        data: {
-          capacity: {
-            increment: 1,
+      const removedBookings = await ctx.db.$transaction(async (tx) => {
+        const bookings = await tx.seatBooking.findMany({
+          where: {
+            sessionId: input.sessionId,
+            seatId: seatId.id,
+            name: input.name,
+            ...(input.isTeacher ? {} : { userId: ctx.auth.userId }),
           },
-        },
+          include: {
+            equipmentBookings: true,
+            user: { select: { email: true, firstName: true, lastName: true } },
+            session: { include: { lab: { select: { name: true } } } },
+          },
+        });
+
+        if (bookings.length === 0) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Booking not found" });
+        }
+
+        for (const booking of bookings) {
+          for (const eq of booking.equipmentBookings) {
+            await tx.sessionEquipment.update({
+              where: {
+                sessionId_equipmentId: {
+                  sessionId: booking.sessionId,
+                  equipmentId: eq.equipmentId,
+                },
+              },
+              data: { reserved: { decrement: eq.amount } },
+            });
+          }
+
+          await tx.equipmentBooking.deleteMany({
+            where: { seatBookingId: booking.id },
+          });
+        }
+
+        await tx.seatBooking.deleteMany({
+          where: {
+            sessionId: input.sessionId,
+            seatId: seatId.id,
+            name: input.name,
+            ...(input.isTeacher ? {} : { userId: ctx.auth.userId }),
+          },
+        });
+
+        await tx.session.updateMany({
+          where: { id: input.sessionId },
+          data: { capacity: { increment: bookings.length } },
+        });
+
+        return bookings;
       });
 
-      return await ctx.db.seatBooking.deleteMany({
-        where: {
-          sessionId: input.sessionId,
-          seatId: seatId.id,
-          name: input.name,
-          ...(input.isTeacher ? {} : { userId: ctx.auth.userId }),
-        },
+      try {
+        for (const booking of removedBookings) {
+          await sendBookingStatusEmail(
+            booking.user.email,
+            `${booking.user.firstName} ${booking.user.lastName}`,
+            {
+              labName: booking.session.lab.name,
+              seatName: booking.name,
+              startAt: booking.session.startAt,
+              endAt: booking.session.endAt,
+            },
+            "CANCELLED"
+          );
+        }
+      } catch (error) {
+        console.error("Failed to send cancellation email:", error);
+      }
+
+      return { success: true };
+    }),
+
+  switchSeat: privateProcedure
+    .input(
+      z.object({
+        sessionId: z.string(),
+        labId: z.string(),
+        newSeatName: z.string(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const session = await ctx.db.session.findUnique({
+        where: { id: input.sessionId },
+        select: { startAt: true, labId: true },
+      });
+
+      if (!session) throw new TRPCError({ code: "NOT_FOUND", message: "Session not found" });
+
+      if (session.labId !== input.labId) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Session does not belong to the specified lab"
+        });
+      }
+
+      const user = await ctx.db.user.findUnique({
+        where: { id: ctx.auth.userId },
+        select: { role: true },
+      });
+      const isAdmin = user?.role === "ADMIN";
+      const isTeacher = user?.role === "TEACHER";
+
+      if (!isAdmin && !isTeacher) {
+        const now = new Date();
+        const lockTime = new Date(session.startAt.getTime() - 15 * 60 * 1000);
+        if (now > lockTime) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Bookings are locked 15 minutes before the session starts.",
+          });
+        }
+      }
+
+      const seatPositionMatch = input.newSeatName.match(/^([A-Za-z]+)(\d+)$/);
+      const rowName = seatPositionMatch?.[1]?.toUpperCase();
+      const colNumber = seatPositionMatch ? Number(seatPositionMatch[2]) : null;
+
+      // Validate against lab config
+      const lab = await ctx.db.lab.findUnique({
+        where: { id: input.labId },
+        select: { defaultRowConfig: true },
+      });
+
+      if (lab?.defaultRowConfig) {
+        try {
+          const config = JSON.parse(lab.defaultRowConfig) as { rows: { name: string; seats: number }[]; edgeSeat: boolean };
+          let isValid = false;
+
+          if (input.newSeatName === "Edge") {
+            isValid = !!config.edgeSeat;
+          } else if (rowName && colNumber) {
+            const rowConfig = config.rows?.find(r => r.name.toUpperCase() === rowName);
+            if (rowConfig && colNumber <= rowConfig.seats) {
+              isValid = true;
+            }
+          }
+
+          if (!isValid) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: `Seat ${input.newSeatName} is not valid for this lab configuration.`
+            });
+          }
+        } catch (e) {
+          if (e instanceof TRPCError) throw e;
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Invalid lab defaultRowConfig JSON; cannot validate seat"
+          });
+        }
+      }
+
+      return await ctx.db.$transaction(async (tx) => {
+        const booking = await tx.seatBooking.findFirst({
+          where: {
+            sessionId: input.sessionId,
+            userId: ctx.auth.userId,
+          },
+          select: { id: true, seatId: true, name: true },
+        });
+
+        if (!booking) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Booking not found" });
+        }
+
+        if (booking.name === input.newSeatName) {
+          return booking;
+        }
+
+        let seat = await tx.seat.findFirst({
+          where: {
+            labId: input.labId,
+            name: input.newSeatName,
+          },
+          select: { id: true },
+        });
+
+        if (!seat) {
+          seat = await tx.seat.create({
+            data: {
+              labId: input.labId,
+              name: input.newSeatName,
+              row: rowName ? rowName.charCodeAt(0) - 64 : undefined,
+              col: colNumber ?? undefined,
+            },
+            select: { id: true },
+          });
+        }
+
+        const seatTaken = await tx.seatBooking.findFirst({
+          where: {
+            sessionId: input.sessionId,
+            seatId: seat.id,
+          },
+          select: { id: true },
+        });
+
+        if (seatTaken) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Seat already booked for this session",
+          });
+        }
+
+        return await tx.seatBooking.update({
+          where: { id: booking.id },
+          data: {
+            seatId: seat.id,
+            name: input.newSeatName,
+          },
+        });
       });
     }),
 
@@ -515,91 +1008,264 @@ export const accountRouter = createTRPCRouter({
             })
           )
           .optional(),
+        notes: z.string().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const seatId = await ctx.db.seat.findFirst({
-        where: {
-          labId: input.labId,
-          name: input.name,
-        },
-        select: { id: true },
+      const seatPositionMatch = input.name.match(/^([A-Za-z]+)(\d+)$/);
+      const rowName = seatPositionMatch?.[1]?.toUpperCase();
+      const colNumber = seatPositionMatch ? Number(seatPositionMatch[2]) : null;
+
+      // Validate against lab config
+      const lab = await ctx.db.lab.findUnique({
+        where: { id: input.labId },
+        select: { defaultRowConfig: true },
       });
 
-      if (!seatId) throw new TRPCError({ code: "NOT_FOUND", message: "Seat not found" });
+      if (lab?.defaultRowConfig) {
+        try {
+          const config = JSON.parse(lab.defaultRowConfig) as { rows: { name: string; seats: number }[]; edgeSeat: boolean };
+          let isValid = false;
 
-      // Check if user is banned
-      const user = await ctx.db.user.findUnique({
-        where: { id: ctx.auth.userId },
-        select: { isBanned: true },
-      });
-
-      const bookingStatus = user?.isBanned ? "PENDING_APPROVAL" : "CONFIRMED";
-
-      // Create seat booking
-      const seatBooking = await ctx.db.seatBooking.create({
-        data: {
-          sessionId: input.sessionId,
-          seatId: seatId.id,
-          userId: ctx.auth.userId,
-          name: input.name,
-          status: bookingStatus,
-        },
-      });
-
-      // Update capacity
-      await ctx.db.session.updateMany({
-        where: { id: input.sessionId },
-        data: { capacity: { decrement: 1 } },
-      });
-
-      // Create equipment bookings if provided
-      if (input.equipment && input.equipment.length > 0) {
-        for (const eq of input.equipment) {
-          // Verify equipment availability
-          const sessionEquipment = await ctx.db.sessionEquipment.findUnique({
-            where: {
-              sessionId_equipmentId: {
-                sessionId: input.sessionId,
-                equipmentId: eq.equipmentId,
-              },
-            },
-          });
-
-          if (!sessionEquipment || sessionEquipment.available - sessionEquipment.reserved < eq.amount) {
-            throw new TRPCError({
-              code: "BAD_REQUEST",
-              message: "Not enough equipment available",
-            });
+          if (input.name === "Edge") {
+            isValid = !!config.edgeSeat;
+          } else if (rowName && colNumber) {
+            const rowConfig = config.rows?.find(r => r.name.toUpperCase() === rowName);
+            if (rowConfig && colNumber <= rowConfig.seats) {
+              isValid = true;
+            }
           }
 
-          // Create equipment booking
-          await ctx.db.equipmentBooking.create({
-            data: {
-              userId: ctx.auth.userId,
-              sessionId: input.sessionId,
-              equipmentId: eq.equipmentId,
-              seatBookingId: seatBooking.id,
-              amount: eq.amount,
-            },
-          });
-
-          // Update reserved count
-          await ctx.db.sessionEquipment.update({
-            where: {
-              sessionId_equipmentId: {
-                sessionId: input.sessionId,
-                equipmentId: eq.equipmentId,
-              },
-            },
-            data: {
-              reserved: { increment: eq.amount },
-            },
+          if (!isValid) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: `Seat ${input.name} is not valid for this lab configuration.`
+            });
+          }
+        } catch (e) {
+          if (e instanceof TRPCError) throw e;
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Invalid lab defaultRowConfig JSON; cannot validate seat"
           });
         }
       }
 
-      return seatBooking;
+      const booking = await ctx.db.$transaction(async (tx) => {
+        // Check for 15-minute lockout
+        const sessionCheck = await tx.session.findUnique({
+          where: { id: input.sessionId },
+          select: { startAt: true, labId: true }
+        });
+
+        if (!sessionCheck) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Session not found" });
+        }
+
+        if (sessionCheck.labId !== input.labId) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Session does not belong to the specified lab"
+          });
+        }
+
+        const now = new Date();
+        const lockTime = new Date(sessionCheck.startAt.getTime() - 15 * 60 * 1000);
+        if (now > lockTime) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Bookings are locked 15 minutes before the session starts."
+          });
+        }
+
+        let seat = await tx.seat.findFirst({
+          where: {
+            labId: input.labId,
+            name: input.name,
+          },
+          select: { id: true },
+        });
+
+        if (!seat) {
+          seat = await tx.seat.create({
+            data: {
+              labId: input.labId,
+              name: input.name,
+              row: rowName ? rowName.charCodeAt(0) - 64 : undefined,
+              col: colNumber ?? undefined,
+            },
+            select: { id: true },
+          });
+        }
+
+        const existingBooking = await tx.seatBooking.findFirst({
+          where: {
+            sessionId: input.sessionId,
+            userId: ctx.auth.userId,
+          },
+          select: { id: true },
+        });
+
+        if (existingBooking) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "You already have a booking for this session",
+          });
+        }
+
+        const seatTaken = await tx.seatBooking.findFirst({
+          where: {
+            sessionId: input.sessionId,
+            seatId: seat.id,
+          },
+          select: { id: true },
+        });
+
+        if (seatTaken) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Seat already booked for this session",
+          });
+        }
+
+        const user = await tx.user.findUnique({
+          where: { id: ctx.auth.userId },
+          select: { isBanned: true },
+        });
+
+        const bookingStatus = user?.isBanned ? "PENDING_APPROVAL" : "CONFIRMED";
+
+        if (input.equipment && input.equipment.length > 0) {
+          for (const eq of input.equipment) {
+            const sessionEquipment = await tx.sessionEquipment.findUnique({
+              where: {
+                sessionId_equipmentId: {
+                  sessionId: input.sessionId,
+                  equipmentId: eq.equipmentId,
+                },
+              },
+            });
+
+            if (
+              !sessionEquipment ||
+              sessionEquipment.available - sessionEquipment.reserved < eq.amount
+            ) {
+              throw new TRPCError({
+                code: "BAD_REQUEST",
+                message: "Not enough equipment available",
+              });
+            }
+          }
+        }
+
+        const capacityUpdate = await tx.session.updateMany({
+          where: { id: input.sessionId, capacity: { gt: 0 } },
+          data: { capacity: { decrement: 1 } },
+        });
+
+        if (capacityUpdate.count === 0) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Session is full",
+          });
+        }
+
+        const seatBooking = await tx.seatBooking.create({
+          data: {
+            sessionId: input.sessionId,
+            seatId: seat.id,
+            userId: ctx.auth.userId,
+            name: input.name,
+            status: bookingStatus,
+            notes: input.notes,
+          },
+        });
+
+        if (input.equipment && input.equipment.length > 0) {
+          for (const eq of input.equipment) {
+            await tx.equipmentBooking.create({
+              data: {
+                userId: ctx.auth.userId,
+                sessionId: input.sessionId,
+                equipmentId: eq.equipmentId,
+                seatBookingId: seatBooking.id,
+                amount: eq.amount,
+              },
+            });
+
+            await tx.sessionEquipment.update({
+              where: {
+                sessionId_equipmentId: {
+                  sessionId: input.sessionId,
+                  equipmentId: eq.equipmentId,
+                },
+              },
+              data: {
+                reserved: { increment: eq.amount },
+              },
+            });
+          }
+        }
+
+        return seatBooking;
+      });
+
+      try {
+        const bookingDetails = await ctx.db.seatBooking.findUnique({
+          where: { id: booking.id },
+          include: {
+            user: { select: { email: true, firstName: true, lastName: true } },
+            seat: { select: { name: true } },
+            session: {
+              include: {
+                lab: { select: { name: true } },
+                createdBy: { select: { email: true, firstName: true, lastName: true } },
+              },
+            },
+            equipmentBookings: {
+              include: { equipment: { select: { name: true } } },
+            },
+          },
+        });
+
+        if (!bookingDetails) {
+          return booking;
+        }
+
+        await sendBookingConfirmationEmail(
+          bookingDetails.user.email,
+          `${bookingDetails.user.firstName} ${bookingDetails.user.lastName}`,
+          {
+            labName: bookingDetails.session.lab.name,
+            seatName: bookingDetails.seat.name,
+            startAt: bookingDetails.session.startAt,
+            endAt: bookingDetails.session.endAt,
+            status: bookingDetails.status,
+            equipment: bookingDetails.equipmentBookings.map((eb) => ({
+              name: eb.equipment.name,
+              amount: eb.amount,
+            })),
+          }
+        );
+
+        if (bookingDetails.status === "PENDING_APPROVAL") {
+          await sendTeacherBookingRequestEmail(
+            bookingDetails.session.createdBy.email,
+            `${bookingDetails.session.createdBy.firstName} ${bookingDetails.session.createdBy.lastName}`,
+            {
+              studentName: `${bookingDetails.user.firstName} ${bookingDetails.user.lastName}`,
+              labName: bookingDetails.session.lab.name,
+              seatName: bookingDetails.seat.name,
+              startAt: bookingDetails.session.startAt,
+              endAt: bookingDetails.session.endAt,
+            }
+          );
+        }
+      } catch (error) {
+        console.error("Failed to send booking email:", error);
+      }
+
+      return booking;
     }),
 
   // Update lab configuration (rows, seats)
@@ -611,10 +1277,125 @@ export const accountRouter = createTRPCRouter({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      return await ctx.db.lab.update({
+      let parsed: { rows?: { name: string; seats: number }[]; edgeSeat?: boolean };
+      try {
+        parsed = JSON.parse(input.config);
+      } catch (e) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Invalid configuration format (JSON parse failed)",
+        });
+      }
+
+      // Check for conflicts with existing future bookings
+      if (parsed?.rows && Array.isArray(parsed.rows)) {
+        const validSeatNames = new Set<string>();
+        parsed.rows.forEach((row) => {
+          for (let i = 1; i <= row.seats; i++) {
+            validSeatNames.add(`${row.name}${i}`);
+          }
+        });
+        if (parsed.edgeSeat) validSeatNames.add("Edge");
+
+        const futureBookings = await ctx.db.seatBooking.findMany({
+          where: {
+            session: {
+              labId: input.labId,
+              startAt: { gte: new Date() },
+            },
+          },
+          select: {
+            seat: {
+              select: { name: true },
+            },
+            user: {
+              select: { firstName: true, lastName: true }
+            }
+          },
+        });
+
+        const invalidBookings = futureBookings.filter(
+          (b) => !validSeatNames.has(b.seat.name)
+        );
+
+        if (invalidBookings.length > 0) {
+          const conflict = invalidBookings[0];
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: `Cannot reduce seats: ${conflict?.user.firstName} ${conflict?.user.lastName} has booked seat ${conflict?.seat.name} in a future session.`
+          });
+        }
+      }
+
+      const updatedLab = await ctx.db.lab.update({
         where: { id: input.labId },
         data: { defaultRowConfig: input.config },
       });
+
+      try {
+        if (!parsed?.rows || !Array.isArray(parsed.rows)) return updatedLab;
+
+        const desiredSeats: { name: string; row: number | null; col: number | null }[] =
+          parsed.rows.flatMap((row, index) => {
+            return Array.from({ length: row.seats }).map((_, i) => ({
+              name: `${row.name}${i + 1}`,
+              row: row.name.toUpperCase().charCodeAt(0) - 64 || index + 1,
+              col: i + 1,
+            }));
+          });
+
+        if (parsed.edgeSeat) {
+          desiredSeats.push({ name: "Edge", row: null, col: null });
+        }
+
+        const existing = await ctx.db.seat.findMany({
+          where: { labId: input.labId },
+          select: { name: true },
+        });
+        const existingNames = new Set(existing.map((s) => s.name));
+        const toCreate = desiredSeats.filter((seat) => !existingNames.has(seat.name));
+
+        if (toCreate.length > 0) {
+          await ctx.db.seat.createMany({
+            data: toCreate.map((seat) => ({
+              labId: input.labId,
+              name: seat.name,
+              row: seat.row ?? undefined,
+              col: seat.col ?? undefined,
+            })),
+            skipDuplicates: true,
+          });
+        }
+
+        const totalSeats = getTotalSeatsFromConfig(input.config);
+        if (totalSeats > 0) {
+          const futureSessions = await ctx.db.session.findMany({
+            where: {
+              labId: input.labId,
+              startAt: { gte: new Date() },
+            },
+            select: {
+              id: true,
+              _count: { select: { seatBookings: true } },
+            },
+          });
+
+          for (const session of futureSessions) {
+            const remaining = Math.max(
+              totalSeats - session._count.seatBookings,
+              0
+            );
+            await ctx.db.session.update({
+              where: { id: session.id },
+              data: { capacity: remaining },
+            });
+          }
+        }
+      } catch {
+        // ignore config parse errors; lab config already updated
+      }
+
+      return updatedLab;
     }),
 
   // ========== Student Booking Management ==========
@@ -693,6 +1474,34 @@ export const accountRouter = createTRPCRouter({
         data: { capacity: { increment: 1 } },
       });
 
+      try {
+        const bookingDetails = await ctx.db.session.findUnique({
+          where: { id: booking.sessionId },
+          include: { lab: { select: { name: true } } },
+        });
+        if (bookingDetails) {
+          const user = await ctx.db.user.findUnique({
+            where: { id: booking.userId },
+            select: { email: true, firstName: true, lastName: true },
+          });
+          if (user) {
+            await sendBookingStatusEmail(
+              user.email,
+              `${user.firstName} ${user.lastName}`,
+              {
+                labName: bookingDetails.lab.name,
+                seatName: booking.name,
+                startAt: bookingDetails.startAt,
+                endAt: bookingDetails.endAt,
+              },
+              "CANCELLED"
+            );
+          }
+        }
+      } catch (error) {
+        console.error("Failed to send cancellation email:", error);
+      }
+
       return { success: true };
     }),
 
@@ -717,53 +1526,215 @@ export const accountRouter = createTRPCRouter({
   approveBooking: teacherProcedure
     .input(z.object({ bookingId: z.string() }))
     .mutation(async ({ ctx, input }) => {
-      return await ctx.db.seatBooking.update({
+      const booking = await ctx.db.seatBooking.update({
         where: { id: input.bookingId },
         data: { status: "CONFIRMED" },
+        include: {
+          user: { select: { email: true, firstName: true, lastName: true } },
+          session: { include: { lab: { select: { name: true } } } },
+        },
       });
+      try {
+        await sendBookingStatusEmail(
+          booking.user.email,
+          `${booking.user.firstName} ${booking.user.lastName}`,
+          {
+            labName: booking.session.lab.name,
+            seatName: booking.name,
+            startAt: booking.session.startAt,
+            endAt: booking.session.endAt,
+          },
+          "APPROVED"
+        );
+      } catch (error) {
+        console.error("Failed to send approval email:", error);
+      }
+      return booking;
+    }),
+
+  updateBookingDetails: privateProcedure
+    .input(
+      z.object({
+        bookingId: z.string(),
+        notes: z.string().optional(),
+        equipment: z.array(
+          z.object({
+            equipmentId: z.string(),
+            amount: z.number().min(1),
+          })
+        ).optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      // 1. Fetch Booking & Session
+      const booking = await ctx.db.seatBooking.findUnique({
+        where: { id: input.bookingId },
+        include: { session: true }
+      });
+
+      if (!booking) throw new TRPCError({ code: "NOT_FOUND", message: "Booking not found" });
+
+      // 2. Check Permissions (Teacher/Admin or Own Booking)
+      const user = await ctx.db.user.findUnique({ where: { id: ctx.auth.userId }, select: { role: true } });
+      const isTeacher = user?.role === "TEACHER" || user?.role === "ADMIN";
+
+      if (!isTeacher && booking.userId !== ctx.auth.userId) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Not authorized to update this booking" });
+      }
+
+      // 3. Check Lockout (if student)
+      if (!isTeacher) {
+        const now = new Date();
+        const lockTime = new Date(booking.session.startAt.getTime() - 15 * 60 * 1000);
+        if (now > lockTime) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Updates are locked 15 minutes before session starts." });
+        }
+      }
+
+      // 4. Update Transaction
+      await ctx.db.$transaction(async (tx) => {
+        // Update Notes
+        if (input.notes !== undefined) {
+          await tx.seatBooking.update({
+            where: { id: input.bookingId },
+            data: { notes: input.notes }
+          });
+        }
+
+        // Update Equipment
+        if (input.equipment) {
+          // 1. Get old equipment bookings BEFORE deleting
+          const oldEquipmentBookings = await tx.equipmentBooking.findMany({
+            where: { seatBookingId: input.bookingId }
+          });
+
+          // 2. Decrement reserved for old equipment
+          for (const eq of oldEquipmentBookings) {
+            await tx.sessionEquipment.updateMany({
+              where: {
+                sessionId: booking.sessionId,
+                equipmentId: eq.equipmentId,
+              },
+              data: { reserved: { decrement: eq.amount } },
+            });
+          }
+
+          // 3. Delete existing equipment bookings
+          await tx.equipmentBooking.deleteMany({
+            where: { seatBookingId: input.bookingId }
+          });
+
+          // 4. Create new equipment bookings with sessionId AND increment reserved
+          if (input.equipment.length > 0) {
+            for (const e of input.equipment) {
+              // Check availability first
+              const sessionEquipment = await tx.sessionEquipment.findUnique({
+                where: {
+                  sessionId_equipmentId: {
+                    sessionId: booking.sessionId,
+                    equipmentId: e.equipmentId,
+                  },
+                },
+              });
+
+              if (!sessionEquipment || sessionEquipment.available - sessionEquipment.reserved < e.amount) {
+                throw new TRPCError({
+                  code: "BAD_REQUEST",
+                  message: "Not enough equipment available",
+                });
+              }
+
+              // Create equipment booking with sessionId
+              await tx.equipmentBooking.create({
+                data: {
+                  seatBookingId: input.bookingId,
+                  equipmentId: e.equipmentId,
+                  amount: e.amount,
+                  userId: booking.userId,
+                  sessionId: booking.sessionId, // CRITICAL: Include sessionId
+                }
+              });
+
+              // Increment reserved count
+              await tx.sessionEquipment.update({
+                where: {
+                  sessionId_equipmentId: {
+                    sessionId: booking.sessionId,
+                    equipmentId: e.equipmentId,
+                  },
+                },
+                data: { reserved: { increment: e.amount } },
+              });
+            }
+          }
+        }
+      });
+
+      return { success: true };
     }),
 
   rejectBooking: teacherProcedure
     .input(z.object({ bookingId: z.string() }))
     .mutation(async ({ ctx, input }) => {
-      const booking = await ctx.db.seatBooking.findUnique({
-        where: { id: input.bookingId },
-        include: { equipmentBookings: true },
-      });
-
-      if (!booking) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Booking not found" });
-      }
-
-      // Release equipment reservations
-      for (const eq of booking.equipmentBookings) {
-        await ctx.db.sessionEquipment.update({
-          where: {
-            sessionId_equipmentId: {
-              sessionId: booking.sessionId,
-              equipmentId: eq.equipmentId,
-            },
+      const removedBooking = await ctx.db.$transaction(async (tx) => {
+        const booking = await tx.seatBooking.findUnique({
+          where: { id: input.bookingId },
+          include: {
+            equipmentBookings: true,
+            user: { select: { email: true, firstName: true, lastName: true } },
+            session: { include: { lab: { select: { name: true } } } },
           },
-          data: { reserved: { decrement: eq.amount } },
         });
+
+        if (!booking) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Booking not found" });
+        }
+
+        for (const eq of booking.equipmentBookings) {
+          await tx.sessionEquipment.update({
+            where: {
+              sessionId_equipmentId: {
+                sessionId: booking.sessionId,
+                equipmentId: eq.equipmentId,
+              },
+            },
+            data: { reserved: { decrement: eq.amount } },
+          });
+        }
+
+        await tx.equipmentBooking.deleteMany({
+          where: { seatBookingId: input.bookingId },
+        });
+
+        await tx.seatBooking.delete({
+          where: { id: input.bookingId },
+        });
+
+        await tx.session.update({
+          where: { id: booking.sessionId },
+          data: { capacity: { increment: 1 } },
+        });
+
+        return booking;
+      });
+
+      if (removedBooking) {
+        try {
+          await sendBookingStatusEmail(
+            removedBooking.user.email,
+            `${removedBooking.user.firstName} ${removedBooking.user.lastName}`,
+            {
+              labName: removedBooking.session.lab.name,
+              seatName: removedBooking.name,
+              startAt: removedBooking.session.startAt,
+              endAt: removedBooking.session.endAt,
+            },
+            "REJECTED"
+          );
+        } catch (error) {
+          console.error("Failed to send rejection email:", error);
+        }
       }
-
-      // Delete equipment bookings
-      await ctx.db.equipmentBooking.deleteMany({
-        where: { seatBookingId: input.bookingId },
-      });
-
-      // Update booking status
-      await ctx.db.seatBooking.update({
-        where: { id: input.bookingId },
-        data: { status: "REJECTED" },
-      });
-
-      // Increment capacity
-      await ctx.db.session.update({
-        where: { id: booking.sessionId },
-        data: { capacity: { increment: 1 } },
-      });
 
       return { success: true };
     }),
@@ -777,6 +1748,7 @@ export const accountRouter = createTRPCRouter({
         name: z.string(),
         total: z.number(),
         expirationDate: z.date().optional(),
+        unitType: z.enum(["UNIT", "ML"]),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -785,6 +1757,7 @@ export const accountRouter = createTRPCRouter({
           labId: input.labId,
           name: input.name,
           total: input.total,
+          unitType: input.unitType,
           expirationDate: input.expirationDate,
           createdBy: ctx.auth.userId,
         },
@@ -806,6 +1779,7 @@ export const accountRouter = createTRPCRouter({
           id: true,
           name: true,
           total: true,
+          unitType: true,
           expirationDate: true,
           createdBy: true,
         },
@@ -845,6 +1819,7 @@ export const accountRouter = createTRPCRouter({
         id: z.string(),
         name: z.string().optional(),
         total: z.number().optional(),
+        unitType: z.enum(["UNIT", "ML"]).optional(),
         expirationDate: z.date().nullish(),
       })
     )
@@ -854,6 +1829,7 @@ export const accountRouter = createTRPCRouter({
         data: {
           name: input.name,
           total: input.total,
+          unitType: input.unitType,
           expirationDate: input.expirationDate,
         },
       });
@@ -878,6 +1854,7 @@ export const accountRouter = createTRPCRouter({
               id: true,
               name: true,
               total: true,
+              unitType: true,
               expirationDate: true,
             },
           },
@@ -895,24 +1872,77 @@ export const accountRouter = createTRPCRouter({
         deletedEq: z
           .object({
             id: z.string(),
-            available: z.number(),
+            available: z.number().min(0),
           })
           .array(),
         addedEq: z
           .object({
             id: z.string(),
-            available: z.number(),
+            available: z.number().min(0),
           })
           .array(),
         updatedEq: z
           .object({
             id: z.string(),
-            available: z.number(),
+            available: z.number().min(0),
           })
           .array(),
       })
     )
     .mutation(async ({ ctx, input }) => {
+      const existingSessionEquipment = await ctx.db.sessionEquipment.findMany({
+        where: { sessionId: input.sessionId },
+        select: { equipmentId: true, reserved: true },
+      });
+      const reservedMap = new Map(
+        existingSessionEquipment.map((eq) => [eq.equipmentId, eq.reserved])
+      );
+
+      for (const eq of input.deletedEq) {
+        const reserved = reservedMap.get(eq.id) ?? 0;
+        if (reserved > 0) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Cannot remove equipment with existing reservations",
+          });
+        }
+      }
+
+      for (const eq of input.updatedEq) {
+        const reserved = reservedMap.get(eq.id) ?? 0;
+        if (eq.available < reserved) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Available amount cannot be less than reserved",
+          });
+        }
+      }
+
+      const equipmentIds = [
+        ...input.addedEq.map((eq) => eq.id),
+        ...input.updatedEq.map((eq) => eq.id),
+      ];
+
+      if (equipmentIds.length > 0) {
+        const equipmentTotals = await ctx.db.equipment.findMany({
+          where: { id: { in: equipmentIds } },
+          select: { id: true, total: true },
+        });
+        const totalsMap = new Map(
+          equipmentTotals.map((eq) => [eq.id, eq.total])
+        );
+
+        for (const eq of [...input.addedEq, ...input.updatedEq]) {
+          const total = totalsMap.get(eq.id);
+          if (total !== undefined && eq.available > total) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: "Session equipment availability cannot exceed lab inventory",
+            });
+          }
+        }
+      }
+
       await ctx.db.sessionEquipment.deleteMany({
         where: {
           sessionId: input.sessionId,

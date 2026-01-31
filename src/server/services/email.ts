@@ -44,6 +44,16 @@ export interface SendEmailOptions {
   html: string;
 }
 
+const escapeHtml = (text: string | null | undefined) => {
+  if (!text) return "";
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+};
+
 export const sendEmail = async (options: SendEmailOptions) => {
   if (!transporter) {
     console.log("Email not sent (transporter not configured):", options.subject);
@@ -78,7 +88,7 @@ export const sendStudentReminderEmail = async (
   }
 ) => {
   const equipmentList = sessionDetails.equipment
-    ?.map((e) => `<li>${e.name} (x${e.amount})</li>`)
+    ?.map((e) => `<li>${escapeHtml(e.name)} (x${e.amount})</li>`)
     .join("") ?? "";
 
   const html = `
@@ -101,20 +111,19 @@ export const sendStudentReminderEmail = async (
           <h1>Lab Session Reminder</h1>
         </div>
         <div class="content">
-          <p>Hi ${studentName},</p>
+          <p>Hi ${escapeHtml(studentName)},</p>
           <p>This is a reminder that your lab session is starting in <span class="highlight">3 hours</span>.</p>
 
           <div class="details">
             <h3>Session Details</h3>
-            <p><strong>Lab:</strong> ${sessionDetails.labName}</p>
+            <p><strong>Lab:</strong> ${escapeHtml(sessionDetails.labName)}</p>
             <p><strong>Date:</strong> ${formatDate(sessionDetails.startAt)}</p>
             <p><strong>Time:</strong> ${formatTime(sessionDetails.startAt)} - ${formatTime(sessionDetails.endAt)}</p>
-            <p><strong>Your Seat:</strong> ${sessionDetails.seatName}</p>
-            ${
-              equipmentList
-                ? `<p><strong>Equipment Reserved:</strong></p><ul>${equipmentList}</ul>`
-                : ""
-            }
+            <p><strong>Your Seat:</strong> ${escapeHtml(sessionDetails.seatName)}</p>
+            ${equipmentList
+      ? `<p><strong>Equipment Reserved:</strong></p><ul>${equipmentList}</ul>`
+      : ""
+    }
           </div>
 
           <p>Please arrive on time and bring any necessary materials.</p>
@@ -147,6 +156,7 @@ export const sendTeacherSummaryEmail = async (
     students: {
       name: string;
       seatName: string;
+      notes?: string | null;  // Added notes field
       equipment?: { name: string; amount: number }[];
     }[];
     totalEquipmentNeeds: { name: string; totalAmount: number }[];
@@ -155,82 +165,84 @@ export const sendTeacherSummaryEmail = async (
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
   const attendanceUrl = `${appUrl}/attendance/${sessionDetails.sessionId}`;
 
+  // const escapeHtml... removed, using global
+
   const studentRows = sessionDetails.students
     .map(
       (s) =>
         `<tr>
-          <td style="padding: 8px; border-bottom: 1px solid #eee;">${s.name}</td>
-          <td style="padding: 8px; border-bottom: 1px solid #eee;">${s.seatName}</td>
-          <td style="padding: 8px; border-bottom: 1px solid #eee;">${
-            s.equipment?.map((e) => `${e.name} (x${e.amount})`).join(", ") ?? "-"
-          }</td>
-        </tr>`
+            <td style="padding: 8px; border-bottom: 1px solid #eee;">${escapeHtml(s.name)}</td>
+            <td style="padding: 8px; border-bottom: 1px solid #eee;">${escapeHtml(s.seatName)}</td>
+            <td style="padding: 8px; border-bottom: 1px solid #eee;">${s.equipment?.map((e) => `${escapeHtml(e.name)} (x${e.amount})`).join(", ") ?? "-"
+        }</td>
+            <td style="padding: 8px; border-bottom: 1px solid #eee; font-style: italic; color: #666;">${escapeHtml(s.notes) || "-"}</td>
+          </tr>`
     )
     .join("");
 
   const equipmentSummary = sessionDetails.totalEquipmentNeeds
-    .map((e) => `<li>${e.name}: <strong>${e.totalAmount}</strong> units needed</li>`)
+    .map((e) => `<li>${escapeHtml(e.name)}: <strong>${e.totalAmount}</strong> units needed</li>`)
     .join("");
 
   const html = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <style>
-        body { font-family: 'Montserrat', Arial, sans-serif; line-height: 1.6; color: #333; }
-        .container { max-width: 700px; margin: 0 auto; padding: 20px; }
-        .header { background: #003087; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
-        .content { background: #f9f9f9; padding: 20px; border-radius: 0 0 8px 8px; }
-        .btn { display: inline-block; background: #B3DC3C; color: #003087; padding: 12px 24px; text-decoration: none; border-radius: 25px; font-weight: bold; margin: 15px 0; }
-        .table { width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; }
-        .table th { background: #003087; color: white; padding: 12px; text-align: left; }
-        .equipment-box { background: white; padding: 15px; border-radius: 8px; margin: 15px 0; border-left: 4px solid #B3DC3C; }
-        .footer { text-align: center; margin-top: 20px; color: #666; font-size: 12px; }
-      </style>
-    </head>
-    <body>
-      <div class="container">
-        <div class="header">
-          <h1>Session Starting Soon</h1>
-          <p style="margin: 0; opacity: 0.9;">15 minutes until your session begins</p>
-        </div>
-        <div class="content">
-          <p>Hi ${teacherName},</p>
-          <p>Your lab session is about to start. Here's your session summary:</p>
-
-          <p><strong>Lab:</strong> ${sessionDetails.labName}<br>
-          <strong>Time:</strong> ${formatTime(sessionDetails.startAt)} - ${formatTime(sessionDetails.endAt)}<br>
-          <strong>Date:</strong> ${formatDate(sessionDetails.startAt)}<br>
-          <strong>Total Students:</strong> ${sessionDetails.students.length}</p>
-
-          <div style="text-align: center;">
-            <a href="${attendanceUrl}" class="btn">Mark Attendance</a>
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <style>
+          body { font-family: 'Montserrat', Arial, sans-serif; line-height: 1.6; color: #333; }
+          .container { max-width: 700px; margin: 0 auto; padding: 20px; }
+          .header { background: #003087; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
+          .content { background: #f9f9f9; padding: 20px; border-radius: 0 0 8px 8px; }
+          .btn { display: inline-block; background: #B3DC3C; color: #003087; padding: 12px 24px; text-decoration: none; border-radius: 25px; font-weight: bold; margin: 15px 0; }
+          .table { width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; }
+          .table th { background: #003087; color: white; padding: 12px; text-align: left; }
+          .equipment-box { background: white; padding: 15px; border-radius: 8px; margin: 15px 0; border-left: 4px solid #B3DC3C; }
+          .footer { text-align: center; margin-top: 20px; color: #666; font-size: 12px; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1>Session Starting Soon</h1>
+            <p style="margin: 0; opacity: 0.9;">15 minutes until your session begins</p>
           </div>
-
-          ${
-            equipmentSummary
-              ? `
-            <div class="equipment-box">
-              <h3 style="margin-top: 0;">Equipment Needed</h3>
-              <ul>${equipmentSummary}</ul>
+          <div class="content">
+            <p>Hi ${escapeHtml(teacherName)},</p>
+            <p>Your lab session is about to start. Here's your session summary:</p>
+  
+            <p><strong>Lab:</strong> ${escapeHtml(sessionDetails.labName)}<br>
+            <strong>Time:</strong> ${formatTime(sessionDetails.startAt)} - ${formatTime(sessionDetails.endAt)}<br>
+            <strong>Date:</strong> ${formatDate(sessionDetails.startAt)}<br>
+            <strong>Total Students:</strong> ${sessionDetails.students.length}</p>
+  
+            <div style="text-align: center;">
+              <a href="${attendanceUrl}" class="btn">Mark Attendance</a>
             </div>
-          `
-              : ""
-          }
-
-          <h3>Student List</h3>
-          <table class="table">
-            <thead>
-              <tr>
-                <th>Student</th>
-                <th>Seat</th>
-                <th>Equipment Requested</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${studentRows || '<tr><td colspan="3" style="padding: 15px; text-align: center;">No students registered</td></tr>'}
-            </tbody>
-          </table>
+  
+            ${equipmentSummary
+      ? `
+              <div class="equipment-box">
+                <h3 style="margin-top: 0;">Equipment Needed</h3>
+                <ul>${equipmentSummary}</ul>
+              </div>
+            `
+      : ""
+    }
+  
+            <h3>Student List</h3>
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Student</th>
+                  <th>Seat</th>
+                  <th>Equipment Requested</th>
+                  <th>Notes</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${studentRows || '<tr><td colspan="4" style="padding: 15px; text-align: center;">No students registered</td></tr>'}
+              </tbody>
+            </table>
 
           <div class="footer">
             <p>The Global College Lab Reservation System</p>
@@ -263,7 +275,7 @@ export const sendBookingConfirmationEmail = async (
 ) => {
   const isPending = bookingDetails.status === "PENDING_APPROVAL";
   const equipmentList = bookingDetails.equipment
-    ?.map((e) => `<li>${e.name} (x${e.amount})</li>`)
+    ?.map((e) => `<li>${escapeHtml(e.name)} (x${e.amount})</li>`)
     .join("") ?? "";
 
   const html = `
@@ -288,24 +300,22 @@ export const sendBookingConfirmationEmail = async (
           <h1>${isPending ? "Booking Pending Approval" : "Booking Confirmed"}</h1>
         </div>
         <div class="content">
-          <p>Hi ${studentName},</p>
-          ${
-            isPending
-              ? "<p>Your booking has been submitted and is <strong>pending teacher approval</strong>. You will be notified once it's reviewed.</p>"
-              : "<p>Your lab session booking has been <strong>confirmed</strong>!</p>"
-          }
+          <p>Hi ${escapeHtml(studentName)},</p>
+          ${isPending
+      ? "<p>Your booking has been submitted and is <strong>pending teacher approval</strong>. You will be notified once it's reviewed.</p>"
+      : "<p>Your lab session booking has been <strong>confirmed</strong>!</p>"
+    }
 
           <div class="details">
             <p><strong>Status:</strong> <span class="status ${isPending ? "status-pending" : "status-confirmed"}">${isPending ? "Pending Approval" : "Confirmed"}</span></p>
-            <p><strong>Lab:</strong> ${bookingDetails.labName}</p>
+            <p><strong>Lab:</strong> ${escapeHtml(bookingDetails.labName)}</p>
             <p><strong>Date:</strong> ${formatDate(bookingDetails.startAt)}</p>
             <p><strong>Time:</strong> ${formatTime(bookingDetails.startAt)} - ${formatTime(bookingDetails.endAt)}</p>
-            <p><strong>Seat:</strong> ${bookingDetails.seatName}</p>
-            ${
-              equipmentList
-                ? `<p><strong>Equipment Reserved:</strong></p><ul>${equipmentList}</ul>`
-                : ""
-            }
+            <p><strong>Seat:</strong> ${escapeHtml(bookingDetails.seatName)}</p>
+            ${equipmentList
+      ? `<p><strong>Equipment Reserved:</strong></p><ul>${equipmentList}</ul>`
+      : ""
+    }
           </div>
 
           <div class="footer">
@@ -320,6 +330,117 @@ export const sendBookingConfirmationEmail = async (
   return sendEmail({
     to: studentEmail,
     subject: `${isPending ? "Pending: " : ""}Lab Booking - ${bookingDetails.labName} on ${formatDate(bookingDetails.startAt)}`,
+    html,
+  });
+};
+
+export const sendBookingStatusEmail = async (
+  studentEmail: string,
+  studentName: string,
+  bookingDetails: {
+    labName: string;
+    seatName: string;
+    startAt: Date;
+    endAt: Date;
+  },
+  status: "APPROVED" | "REJECTED" | "CANCELLED"
+) => {
+  const statusText =
+    status === "APPROVED"
+      ? "approved"
+      : status === "REJECTED"
+        ? "rejected"
+        : "cancelled";
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <style>
+        body { font-family: 'Montserrat', Arial, sans-serif; line-height: 1.6; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background: ${status === "APPROVED" ? "#003087" : "#ef4444"}; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
+        .content { background: #f9f9f9; padding: 20px; border-radius: 0 0 8px 8px; }
+        .details { background: white; padding: 15px; border-radius: 8px; margin: 15px 0; }
+        .footer { text-align: center; margin-top: 20px; color: #666; font-size: 12px; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>Booking ${statusText}</h1>
+        </div>
+        <div class="content">
+          <p>Hi ${escapeHtml(studentName)},</p>
+          <p>Your lab booking has been <strong>${statusText}</strong>.</p>
+          <div class="details">
+            <p><strong>Lab:</strong> ${escapeHtml(bookingDetails.labName)}</p>
+            <p><strong>Date:</strong> ${formatDate(bookingDetails.startAt)}</p>
+            <p><strong>Time:</strong> ${formatTime(bookingDetails.startAt)} - ${formatTime(bookingDetails.endAt)}</p>
+            <p><strong>Seat:</strong> ${escapeHtml(bookingDetails.seatName)}</p>
+          </div>
+          <div class="footer">
+            <p>The Global College Lab Reservation System</p>
+          </div>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  return sendEmail({
+    to: studentEmail,
+    subject: `Lab Booking ${statusText}: ${bookingDetails.labName} on ${formatDate(bookingDetails.startAt)}`,
+    html,
+  });
+};
+
+export const sendTeacherBookingRequestEmail = async (
+  teacherEmail: string,
+  teacherName: string,
+  bookingDetails: {
+    studentName: string;
+    labName: string;
+    seatName: string;
+    startAt: Date;
+    endAt: Date;
+  }
+) => {
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <style>
+        body { font-family: 'Montserrat', Arial, sans-serif; line-height: 1.6; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background: #003087; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
+        .content { background: #f9f9f9; padding: 20px; border-radius: 0 0 8px 8px; }
+        .details { background: white; padding: 15px; border-radius: 8px; margin: 15px 0; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>Booking Approval Needed</h1>
+        </div>
+        <div class="content">
+          <p>Hi ${escapeHtml(teacherName)},</p>
+          <p>${escapeHtml(bookingDetails.studentName)} has requested a booking.</p>
+          <div class="details">
+            <p><strong>Lab:</strong> ${escapeHtml(bookingDetails.labName)}</p>
+            <p><strong>Date:</strong> ${formatDate(bookingDetails.startAt)}</p>
+            <p><strong>Time:</strong> ${formatTime(bookingDetails.startAt)} - ${formatTime(bookingDetails.endAt)}</p>
+            <p><strong>Seat:</strong> ${escapeHtml(bookingDetails.seatName)}</p>
+          </div>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  return sendEmail({
+    to: teacherEmail,
+    subject: `Approval needed: ${bookingDetails.labName} booking request`,
     html,
   });
 };
@@ -345,6 +466,7 @@ export const getSessionsNeedingReminders = async () => {
         gte: studentReminderWindowStart,
         lte: studentReminderWindowEnd,
       },
+      studentReminderSentAt: null,
     },
     include: {
       lab: { select: { name: true } },
@@ -368,13 +490,15 @@ export const getSessionsNeedingReminders = async () => {
         gte: teacherReminderWindowStart,
         lte: teacherReminderWindowEnd,
       },
+      teacherReminderSentAt: null,
     },
     include: {
       lab: { select: { name: true } },
       createdBy: { select: { email: true, firstName: true, lastName: true } },
       seatBookings: {
         where: { status: "CONFIRMED" },
-        include: {
+        select: {
+          notes: true, // Include notes for teacher summary
           user: { select: { firstName: true, lastName: true } },
           seat: { select: { name: true } },
           equipmentBookings: {

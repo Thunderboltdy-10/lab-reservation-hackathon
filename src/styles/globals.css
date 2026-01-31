@@ -64,9 +64,9 @@
   --radius: 0.625rem;
 
   /* Light Theme - Clean white with navy primary */
-  --background: #FFFFFF;
+  --background: #f8fafc;
   --foreground: #1a1a2e;
-  --card: #FFFFFF;
+  --card: #ffffff;
   --card-foreground: #1a1a2e;
   --popover: #FFFFFF;
   --popover-foreground: #1a1a2e;
@@ -116,7 +116,7 @@
 
 .dark {
   /* Dark Theme - Deep navy background with lime accents */
-  --background: #0a1628;
+  --background: #0e1c33;
   --foreground: #f4f4f5;
   --card: #0f1f35;
   --card-foreground: #f4f4f5;

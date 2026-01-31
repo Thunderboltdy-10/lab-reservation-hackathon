@@ -63,8 +63,14 @@ export const POST = async (req: Request) => {
       });
     }
 
-    await db.user.create({
-      data: {
+    await db.user.upsert({
+      where: { id },
+      update: {
+        email: emailAddress,
+        firstName: first_name ?? "",
+        lastName: last_name ?? "",
+      },
+      create: {
         id,
         email: emailAddress,
         firstName: first_name ?? "",

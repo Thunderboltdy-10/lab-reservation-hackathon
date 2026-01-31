@@ -11,7 +11,11 @@ import { Toaster } from "@/components/ui/sonner";
 export const metadata: Metadata = {
   title: "Lab Reservation | The Global College",
   description: "Book your lab sessions at The Global College",
-  icons: [{ rel: "icon", url: "/icon.png" }],
+  icons: {
+    icon: "/favicon.ico",
+    shortcut: "/favicon.ico",
+    apple: "/icon.jpg",
+  },
 };
 
 const geist = Geist({
@@ -41,7 +45,47 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <body className="font-sans antialiased">
-        <ClerkProvider>
+        <ClerkProvider
+          appearance={{
+            variables: {
+              colorPrimary: "var(--primary)",
+              colorBackground: "var(--background)",
+              colorInputBackground: "var(--input)",
+              colorInputText: "var(--foreground)",
+              colorText: "var(--foreground)",
+              colorTextSecondary: "var(--muted-foreground)",
+              borderRadius: "0.625rem",
+              fontFamily: "Inter, sans-serif",
+            },
+            elements: {
+              rootBox: "mx-auto",
+              card: "bg-card border border-border shadow-xl",
+              headerTitle: "text-foreground font-semibold",
+              headerSubtitle: "text-muted-foreground",
+              socialButtonsBlockButton: "bg-secondary hover:bg-secondary/80 border border-border",
+              socialButtonsBlockButtonText: "text-foreground font-medium",
+              socialButtonsProviderIcon: "text-foreground",
+              dividerLine: "bg-border",
+              dividerText: "text-muted-foreground",
+              formFieldLabel: "text-foreground",
+              formFieldInput: "bg-input border-border text-foreground placeholder:text-muted-foreground focus:ring-primary",
+              formButtonPrimary: "bg-primary text-primary-foreground hover:bg-primary/90 font-semibold",
+              footerActionLink: "text-primary hover:text-primary/80",
+              identityPreviewText: "text-foreground",
+              identityPreviewEditButton: "text-primary hover:text-primary/80",
+              formFieldAction: "text-primary hover:text-primary/80",
+              alertText: "text-foreground",
+              badge: "bg-primary/20 text-primary",
+              userButtonPopoverCard: "bg-card border border-border text-foreground",
+              userButtonPopoverMain: "bg-card text-foreground",
+              userButtonPopoverFooter: "text-muted-foreground",
+              userButtonPopoverActionButton: "text-foreground hover:bg-muted",
+              userButtonPopoverActionButtonText: "text-foreground",
+              userButtonPopoverActionButtonIcon: "text-foreground",
+              userButtonPopoverFooterAction: "text-primary hover:text-primary/80",
+            },
+          }}
+        >
           <SidebarProvider>
             <ThemeProvider
               attribute="class"

@@ -24,6 +24,7 @@ import { useAuth } from "@clerk/nextjs";
 import { useTheme } from "next-themes";
 import { formatInTimeZone, toZonedTime, fromZonedTime } from "date-fns-tz";
 import { Clock } from "lucide-react";
+import { getTotalSeats, parseLabConfig } from "./SeatGrid";
 
 // School timezone - configurable via environment variable
 const SCHOOL_TIMEZONE = process.env.NEXT_PUBLIC_TIMEZONE ?? "Europe/Madrid";
@@ -46,6 +47,9 @@ const createDateInSchoolTZ = (baseDate: Date, timeString: string): Date => {
   return fromZonedTime(zonedDate, SCHOOL_TIMEZONE);
 };
 
+const addMinutes = (date: Date, minutes: number) =>
+  new Date(date.getTime() + minutes * 60 * 1000);
+
 const CalendarPicker = ({
   lab,
   isTeacher,
@@ -56,6 +60,7 @@ const CalendarPicker = ({
   const [date, setDate] = React.useState<Date | undefined>(undefined);
   const [startDate, setStartDate] = React.useState<Date | undefined>(undefined);
   const [endDate, setEndDate] = React.useState<Date | undefined>(undefined);
+  const [endAuto, setEndAuto] = React.useState(true);
 
   const [isPopupOpenAdd, setIsPopupOpenAdd] = useState(false);
 
@@ -73,6 +78,10 @@ const CalendarPicker = ({
       enabled: !!lab,
     }
   );
+
+  const totalSeats = useMemo(() => {
+    return getTotalSeats(parseLabConfig(labId?.defaultRowConfig));
+  }, [labId?.defaultRowConfig]);
 
   const createSessionMutation = api.account.createSession.useMutation();
   const updateSessionMutation = api.account.updateSession.useMutation();
@@ -97,14 +106,36 @@ const CalendarPicker = ({
     }
   );
 
+  const hasOverlap = (start: Date, end: Date, excludeId?: string) => {
+    return (
+      data?.some((sess) => {
+        if (excludeId && sess.id === excludeId) return false;
+        const existingStart = new Date(sess.startAt);
+        const existingEnd = new Date(sess.endAt);
+        return start < existingEnd && end > existingStart;
+      }) ?? false
+    );
+  };
+
   const createSession = () => {
     setBooking(null);
+    setEquipment(null);
     if (!date || !lab || !labId?.id) return;
 
     if (!startDate || !endDate) return;
 
+    if (endDate <= startDate) {
+      toast.error("End time must be after the start time");
+      return;
+    }
+
     if (endDate.getTime() - startDate.getTime() < 5 * 60 * 1000) {
       toast.error("Session must be at least 5 minutes long");
+      return;
+    }
+
+    if (hasOverlap(startDate, endDate)) {
+      toast.error("Session overlaps with an existing session");
       return;
     }
 
@@ -129,12 +160,23 @@ const CalendarPicker = ({
 
   const updateSession = (id: string) => {
     setBooking(null);
+    setEquipment(null);
     if (!date || !lab || !labId?.id || !id) return;
 
     if (!startDate || !endDate) return;
 
+    if (endDate <= startDate) {
+      toast.error("End time must be after the start time");
+      return;
+    }
+
     if (endDate.getTime() - startDate.getTime() < 5 * 60 * 1000) {
       toast.error("Session must be at least 5 minutes long");
+      return;
+    }
+
+    if (hasOverlap(startDate, endDate, id)) {
+      toast.error("Session overlaps with an existing session");
       return;
     }
 
@@ -158,7 +200,8 @@ const CalendarPicker = ({
   };
 
   const removeSession = (id: string) => {
-    setBooking(null);
+    if (booking === id) setBooking(null);
+    if (equipment === id) setEquipment(null);
     if (!id) return;
 
     removeSessionMutation.mutate(
@@ -189,17 +232,40 @@ const CalendarPicker = ({
   }, [setBooking, setEquipment]);
 
   useEffect(() => {
+    return () => {
+      setBooking(null);
+      setEquipment(null);
+    };
+  }, [setBooking, setEquipment]);
+
+  useEffect(() => {
     refetch();
     if (date) {
-      setStartDate(new Date(date));
-      setEndDate(new Date(date));
+      const start = createDateInSchoolTZ(date, getCurrentTimeInSchoolTZ());
+      const end = addMinutes(start, 55);
+      setStartDate(start);
+      setEndDate(end);
+      setEndAuto(true);
     }
+    setBooking(null);
+    setEquipment(null);
   }, [date, refetch]);
+
+  useEffect(() => {
+    if (!isPopupOpenAdd || !date) return;
+    const start = createDateInSchoolTZ(date, getCurrentTimeInSchoolTZ());
+    const end = addMinutes(start, 55);
+    setStartDate(start);
+    setEndDate(end);
+    setEndAuto(true);
+  }, [isPopupOpenAdd, date]);
 
   // Get current time in school timezone for default values
   const getCurrentTimeInSchoolTZ = () => {
     return formatTimeInSchoolTZ(new Date(), "HH:mm");
   };
+
+  const controlsLocked = booking !== null || equipment !== null;
 
   return (
     <div className="flex h-full justify-center gap-20 p-10">
@@ -215,23 +281,27 @@ const CalendarPicker = ({
           <Clock className="h-3 w-3" />
           <span>Times shown in {SCHOOL_TIMEZONE}</span>
         </div>
-        <div className="bg-card flex max-h-full w-84 flex-col gap-2 overflow-y-auto rounded-lg border p-3">
+        <div className="bg-card flex max-h-full w-84 flex-col gap-3 overflow-y-auto rounded-lg border p-4">
           <div
             className={`flex items-center ${isTeacher === true ? "justify-between" : "justify-center"}`}
           >
-            <div className="pl-2 font-semibold text-foreground text-xl">
-              Sessions
-            </div>
+            <div className="font-semibold text-foreground text-xl">Sessions</div>
             {isTeacher === true && (
               <Popover open={isPopupOpenAdd} onOpenChange={setIsPopupOpenAdd}>
                 <PopoverTrigger asChild>
-                  <Button variant="secondary">+ Add Session</Button>
+                  <Button variant="secondary" disabled={controlsLocked}>
+                    + Add Session
+                  </Button>
                 </PopoverTrigger>
                 <PopoverContent>
                   <h3 className="mb-1">Start Time:</h3>
                   <Input
                     type="time"
-                    defaultValue={getCurrentTimeInSchoolTZ()}
+                    value={
+                      startDate
+                        ? formatTimeInSchoolTZ(startDate, "HH:mm")
+                        : getCurrentTimeInSchoolTZ()
+                    }
                     onChange={(e) => {
                       if (date) {
                         const newStart = createDateInSchoolTZ(
@@ -239,13 +309,20 @@ const CalendarPicker = ({
                           e.target.value
                         );
                         setStartDate(newStart);
+                        if (endAuto) {
+                          setEndDate(addMinutes(newStart, 55));
+                        }
                       }
                     }}
                   />
                   <h3 className="mb-1 mt-3">End Time:</h3>
                   <Input
                     type="time"
-                    defaultValue={getCurrentTimeInSchoolTZ()}
+                    value={
+                      endDate
+                        ? formatTimeInSchoolTZ(endDate, "HH:mm")
+                        : getCurrentTimeInSchoolTZ()
+                    }
                     onChange={(e) => {
                       if (date) {
                         const newEnd = createDateInSchoolTZ(
@@ -253,6 +330,7 @@ const CalendarPicker = ({
                           e.target.value
                         );
                         setEndDate(newEnd);
+                        setEndAuto(false);
                       }
                     }}
                   />
@@ -285,22 +363,27 @@ const CalendarPicker = ({
                     {formatTimeInSchoolTZ(new Date(sess.endAt))}
                   </div>
                   <div className="text-muted-foreground">
-                    Capacity: {sess.capacity}
+                    Capacity: {sess.capacity} / {totalSeats}
                   </div>
                   <div className="text-muted-foreground">
                     Created by: {sess.createdBy.firstName}{" "}
                     {sess.createdBy.lastName}
                   </div>
-                  <div className="mt-2 flex h-full flex-wrap gap-2 p-2">
+                  <div className="mt-3 grid grid-cols-2 gap-2 p-2">
                     {booking !== sess.id ? (
                       <Button
                         className="flex-1"
                         variant="secondary"
                         onClick={() => {
+                          if (equipment !== null) {
+                            toast.error("Finish session equipment first to book a seat");
+                            return;
+                          }
                           setEquipment(null);
                           setBooking(sess.id);
                           toast("Press esc to cancel booking");
                         }}
+                        disabled={equipment !== null}
                       >
                         Book
                       </Button>
@@ -313,32 +396,39 @@ const CalendarPicker = ({
                         Cancel
                       </Button>
                     )}
-                    {equipment !== sess.id ? (
-                      <Button
-                        className="flex-1"
-                        variant="secondary"
-                        onClick={() => {
-                          setBooking(null);
-                          setEquipment(sess.id);
-                          toast("Press esc to cancel session equipment selection");
-                        }}
-                      >
-                        Equipment
-                      </Button>
-                    ) : (
-                      <Button
-                        className="flex-1"
-                        onClick={() => setEquipment(null)}
-                        variant="secondary"
-                      >
-                        Cancel
-                      </Button>
+                    {isTeacher && (
+                      equipment !== sess.id ? (
+                        <Button
+                          className="flex-1"
+                          variant="secondary"
+                          onClick={() => {
+                            if (booking !== null) {
+                              toast.error("Finish booking first to edit session equipment");
+                              return;
+                            }
+                            setBooking(null);
+                            setEquipment(sess.id);
+                            toast("Press esc to cancel session equipment selection");
+                          }}
+                          disabled={booking !== null}
+                        >
+                          Equipment
+                        </Button>
+                      ) : (
+                        <Button
+                          className="flex-1"
+                          onClick={() => setEquipment(null)}
+                          variant="secondary"
+                        >
+                          Cancel
+                        </Button>
+                      )
                     )}
                     {sess.createdBy.id === userId && isTeacher && (
                       <>
                         <Dialog>
                           <DialogTrigger asChild>
-                            <Button className="flex-1" variant="secondary">
+                            <Button className="flex-1" variant="secondary" disabled={controlsLocked}>
                               Remove
                             </Button>
                           </DialogTrigger>
@@ -366,7 +456,18 @@ const CalendarPicker = ({
                         </Dialog>
                         <Dialog>
                           <DialogTrigger asChild>
-                            <Button className="flex-1" variant="secondary">
+                            <Button
+                              className="flex-1"
+                              variant="secondary"
+                              disabled={controlsLocked}
+                              onClick={() => {
+                                const start = new Date(sess.startAt);
+                                const end = new Date(sess.endAt);
+                                setStartDate(start);
+                                setEndDate(end);
+                                setEndAuto(false);
+                              }}
+                            >
                               Edit
                             </Button>
                           </DialogTrigger>
@@ -379,29 +480,33 @@ const CalendarPicker = ({
                                 <h3 className="mb-1">Start Time:</h3>
                                 <Input
                                   type="time"
-                                  defaultValue={formatTimeInSchoolTZ(
-                                    new Date(sess.startAt)
-                                  )}
+                                  value={
+                                    startDate
+                                      ? formatTimeInSchoolTZ(startDate, "HH:mm")
+                                      : formatTimeInSchoolTZ(new Date(sess.startAt))
+                                  }
                                   onChange={(e) => {
-                                    const newDate = createDateInSchoolTZ(
-                                      new Date(sess.startAt),
-                                      e.target.value
-                                    );
+                                    if (!date) return;
+                                    const newDate = createDateInSchoolTZ(date, e.target.value);
                                     setStartDate(newDate);
+                                    if (endAuto) {
+                                      setEndDate(addMinutes(newDate, 55));
+                                    }
                                   }}
                                 />
                                 <h3 className="mb-1 mt-3">End Time:</h3>
                                 <Input
                                   type="time"
-                                  defaultValue={formatTimeInSchoolTZ(
-                                    new Date(sess.endAt)
-                                  )}
+                                  value={
+                                    endDate
+                                      ? formatTimeInSchoolTZ(endDate, "HH:mm")
+                                      : formatTimeInSchoolTZ(new Date(sess.endAt))
+                                  }
                                   onChange={(e) => {
-                                    const newDate = createDateInSchoolTZ(
-                                      new Date(sess.endAt),
-                                      e.target.value
-                                    );
+                                    if (!date) return;
+                                    const newDate = createDateInSchoolTZ(date, e.target.value);
                                     setEndDate(newDate);
+                                    setEndAuto(false);
                                   }}
                                 />
                               </div>

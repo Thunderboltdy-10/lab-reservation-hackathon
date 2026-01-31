@@ -59,12 +59,14 @@ export default function EquipmentPage() {
     id: string;
     name: string;
     total: number;
+    unitType: "UNIT" | "ML";
     expirationDate: Date | null;
   } | null>(null);
 
   // Form state
   const [newName, setNewName] = useState("");
   const [newTotal, setNewTotal] = useState(1);
+  const [newUnitType, setNewUnitType] = useState<"UNIT" | "ML">("UNIT");
   const [newExpiration, setNewExpiration] = useState("");
 
   const { data: labData } = api.account.getLabId.useQuery(
@@ -89,6 +91,7 @@ export default function EquipmentPage() {
         labId: labData.id,
         name: newName.trim(),
         total: newTotal,
+        unitType: newUnitType,
         expirationDate: newExpiration ? new Date(newExpiration) : undefined,
       },
       {
@@ -97,6 +100,7 @@ export default function EquipmentPage() {
           setIsAddDialogOpen(false);
           setNewName("");
           setNewTotal(1);
+          setNewUnitType("UNIT");
           setNewExpiration("");
           refetch();
         },
@@ -115,6 +119,7 @@ export default function EquipmentPage() {
         id: editingEquipment.id,
         name: editingEquipment.name,
         total: editingEquipment.total,
+        unitType: editingEquipment.unitType,
         expirationDate: editingEquipment.expirationDate,
       },
       {
@@ -192,15 +197,29 @@ export default function EquipmentPage() {
                   placeholder="e.g., Microscope, Bunsen Burner"
                 />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="total">Total Quantity</Label>
-                <Input
-                  id="total"
-                  type="number"
-                  min={1}
-                  value={newTotal}
-                  onChange={(e) => setNewTotal(parseInt(e.target.value) || 1)}
-                />
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="unit-type">Unit Type</Label>
+                  <Select value={newUnitType} onValueChange={(value) => setNewUnitType(value as "UNIT" | "ML")}>
+                    <SelectTrigger id="unit-type">
+                      <SelectValue placeholder="Select unit" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="UNIT">Quantity</SelectItem>
+                      <SelectItem value="ML">Milliliters (mL)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="total">Total Amount</Label>
+                  <Input
+                    id="total"
+                    type="number"
+                    min={1}
+                    value={newTotal}
+                    onChange={(e) => setNewTotal(parseInt(e.target.value) || 1)}
+                  />
+                </div>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="expiration">Expiration Date (Optional)</Label>
@@ -275,7 +294,7 @@ export default function EquipmentPage() {
                           {item.name}
                         </CardTitle>
                         <CardDescription className="mt-1">
-                          Total: {item.total} units
+                          Total: {item.total} {item.unitType === "ML" ? "mL" : "qty"}
                         </CardDescription>
                       </div>
                       {expirationStatus && (
@@ -304,6 +323,7 @@ export default function EquipmentPage() {
                                     id: item.id,
                                     name: item.name,
                                     total: item.total,
+                                    unitType: item.unitType,
                                     expirationDate: item.expirationDate
                                       ? new Date(item.expirationDate)
                                       : null,
@@ -335,7 +355,28 @@ export default function EquipmentPage() {
                                 />
                               </div>
                               <div className="space-y-2">
-                                <Label htmlFor="edit-total">Total Quantity</Label>
+                                <Label htmlFor="edit-unit">Unit Type</Label>
+                                <Select
+                                  value={editingEquipment?.unitType ?? "UNIT"}
+                                  onValueChange={(value) =>
+                                    setEditingEquipment((prev) =>
+                                      prev
+                                        ? { ...prev, unitType: value as "UNIT" | "ML" }
+                                        : null
+                                    )
+                                  }
+                                >
+                                  <SelectTrigger id="edit-unit">
+                                    <SelectValue placeholder="Select unit" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="UNIT">Quantity</SelectItem>
+                                    <SelectItem value="ML">Milliliters (mL)</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              <div className="space-y-2">
+                                <Label htmlFor="edit-total">Total Amount</Label>
                                 <Input
                                   id="edit-total"
                                   type="number"

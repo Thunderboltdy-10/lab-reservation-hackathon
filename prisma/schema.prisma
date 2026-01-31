@@ -25,6 +25,11 @@ enum BookingStatus {
   REJECTED
 }
 
+enum EquipmentUnit {
+  UNIT
+  ML
+}
+
 model User {
   id        String   @id @default(cuid())
   email     String   @unique
@@ -89,6 +94,8 @@ model Session {
   createdBy   User     @relation("TeacherSessions", fields: [createdById], references: [id])
   createdById String
   createdAt   DateTime @default(now())
+  studentReminderSentAt DateTime?
+  teacherReminderSentAt DateTime?
 
   seatBookings      SeatBooking[]      @relation("SessionSeatBookings")
   sessionEquipment  SessionEquipment[]
@@ -113,6 +120,7 @@ model SeatBooking {
 
   // Booking status for approval workflow (banned students need approval)
   status BookingStatus @default(CONFIRMED)
+  notes  String?
 
   equipmentBookings EquipmentBooking[]
 
@@ -127,6 +135,7 @@ model Equipment {
   name        String
   description String?
   total       Int      @default(0)
+  unitType    EquipmentUnit @default(UNIT)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

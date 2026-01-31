@@ -2,9 +2,10 @@
 import React, { useEffect, useMemo } from "react";
 import { Calendar } from "@/components/ui/calendar";
 import { api } from "@/trpc/react";
-import { useAuth } from "@clerk/nextjs";
 import { formatInTimeZone } from "date-fns-tz";
 import { Clock, MapPin, Users, User } from "lucide-react";
+import Link from "next/link";
+import { getTotalSeats, parseLabConfig } from "./SeatGrid";
 
 const TIMEZONE = process.env.NEXT_PUBLIC_TIMEZONE ?? "Europe/Madrid";
 
@@ -16,17 +17,19 @@ const formatDate = (date: Date) => {
   return formatInTimeZone(date, TIMEZONE, "EEEE, MMMM d, yyyy");
 };
 
+import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
+
 const CalendarGeneral = () => {
   const [date, setDate] = React.useState<Date | undefined>(undefined);
-
-  const { userId } = useAuth();
+  const utils = api.useUtils();
 
   const normalisedDate = useMemo(() => {
     if (!date) return undefined;
     return new Date(date.getFullYear(), date.getMonth(), date.getDate());
   }, [date]);
 
-  const { data, refetch } = api.account.getSessionAll.useQuery(
+  const { data } = api.account.getSessionAll.useQuery(
     {
       date: normalisedDate,
     },
@@ -39,13 +42,27 @@ const CalendarGeneral = () => {
     }
   );
 
+  const { data: myBookings, refetch: refetchBookings } = api.account.getMyBookings.useQuery(undefined, {
+    enabled: !!data,
+  });
+
+  const { data: user } = api.account.getAccount.useQuery();
+  const isTeacher = user?.role === "TEACHER" || user?.role === "ADMIN";
+
+  const unbookMutation = api.account.unbookSeat.useMutation({
+    onSuccess: () => {
+      toast.success("Seat unbooked");
+      refetchBookings();
+      utils.account.getSessionAll.invalidate();
+    },
+    onError: (err) => {
+      toast.error(err.message);
+    }
+  });
+
   useEffect(() => {
     setDate(new Date());
   }, []);
-
-  useEffect(() => {
-    refetch();
-  }, [date, refetch]);
 
   return (
     <div className="m-10 flex h-3/4 justify-center gap-20">
@@ -73,10 +90,14 @@ const CalendarGeneral = () => {
             </div>
           )}
           <div className="stagger-children space-y-2">
-            {data?.map((sess) => (
-              <div key={sess.id}>
-                <div className="flex flex-col">
-                  <div className="relative w-full cursor-pointer rounded-lg border bg-card p-3 text-center transition-all hover:shadow-md">
+            {data?.map((sess) => {
+              const myBooking = myBookings?.find(b => b.session.id === sess.id);
+              const href = sess.lab.name.toLowerCase().includes("physics") || sess.lab.name.toLowerCase().includes("chemistry") ? "/book/physics" : "/book/biology";
+              const totalSeats = getTotalSeats(parseLabConfig(sess.lab.defaultRowConfig));
+
+              return (
+                <div key={sess.id}>
+                  <div className="relative w-full rounded-lg border bg-card p-3 text-center transition-all hover:border-primary/50">
                     <div className="mb-2 flex items-center justify-center gap-1 font-semibold text-foreground text-lg">
                       <Clock className="h-4 w-4" />
                       {formatTime(new Date(sess.startAt))} -{" "}
@@ -86,20 +107,40 @@ const CalendarGeneral = () => {
                       <MapPin className="h-3 w-3" />
                       {sess.lab.name} Lab
                     </div>
-                    <div className="mt-2 flex flex-wrap items-center justify-center gap-3 text-muted-foreground text-sm">
+                    <div className="mt-2 flex flex-wrap items-center justify-center gap-3 text-muted-foreground text-sm mb-3">
                       <span className="flex items-center gap-1">
                         <Users className="h-3 w-3" />
-                        Capacity: {sess.capacity}
+                        Capacity: {sess.capacity} / {totalSeats}
                       </span>
                       <span className="flex items-center gap-1">
                         <User className="h-3 w-3" />
                         {sess.createdBy.firstName} {sess.createdBy.lastName}
                       </span>
                     </div>
+
+                    {isTeacher ? (
+                      <Button className="w-full" variant="secondary" asChild>
+                        <Link href={href}>Manage</Link>
+                      </Button>
+                    ) : myBooking ? (
+                      <div className="flex gap-2">
+                        <Button
+                          className="flex-1"
+                          variant="secondary"
+                          asChild
+                        >
+                          <Link href={href}>Manage Booking</Link>
+                        </Button>
+                      </div>
+                    ) : (
+                      <Button className="w-full" asChild>
+                        <Link href={href}>Book</Link>
+                      </Button>
+                    )}
                   </div>
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         </div>
       </div>

@@ -14,9 +14,8 @@ const Physics = () => {
     );
   }
 
-  // For book pages, students should see student view
-  // Teachers/Admins can also access and will see teacher controls
-  const isTeacher = account?.role === "TEACHER" || account?.role === "ADMIN";
+  // Book pages should always show the student view
+  const isTeacher = false;
 
   return <Lab isPhysics={true} isTeacher={isTeacher} />;
 };
