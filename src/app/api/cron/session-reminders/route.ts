@@ -92,7 +92,7 @@ export async function GET(request: Request) {
           return {
             name: `${booking.user.firstName} ${booking.user.lastName}`,
             seatName: booking.seat.name,
-            notes: (booking as any).notes || null, // Include booking notes for teacher summary
+            notes: booking.notes ?? null,
             equipment: equipment.length > 0 ? equipment : undefined,
           };
         });

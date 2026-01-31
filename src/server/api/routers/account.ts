@@ -541,14 +541,21 @@ export const accountRouter = createTRPCRouter({
       }
 
       const booking = await ctx.db.$transaction(async (tx) => {
-        // Check for 15-minute lockout
+        // Check for 15-minute lockout and Lab ID validity
         const sessionCheck = await tx.session.findUnique({
           where: { id: input.sessionId },
-          select: { startAt: true }
+          select: { startAt: true, labId: true }
         });
 
         if (!sessionCheck) {
           throw new TRPCError({ code: "NOT_FOUND", message: "Session not found" });
+        }
+
+        if (sessionCheck.labId !== input.labId) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Session does not belong to the specified lab"
+          });
         }
 
         const now = new Date();
@@ -855,10 +862,17 @@ export const accountRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const session = await ctx.db.session.findUnique({
         where: { id: input.sessionId },
-        select: { startAt: true },
+        select: { startAt: true, labId: true },
       });
 
       if (!session) throw new TRPCError({ code: "NOT_FOUND", message: "Session not found" });
+
+      if (session.labId !== input.labId) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Session does not belong to the specified lab"
+        });
+      }
 
       const user = await ctx.db.user.findUnique({
         where: { id: ctx.auth.userId },
@@ -910,7 +924,10 @@ export const accountRouter = createTRPCRouter({
           }
         } catch (e) {
           if (e instanceof TRPCError) throw e;
-          console.error("Failed to parse lab config for validation:", e);
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Invalid lab defaultRowConfig JSON; cannot validate seat"
+          });
         }
       }
 
@@ -1027,7 +1044,10 @@ export const accountRouter = createTRPCRouter({
           }
         } catch (e) {
           if (e instanceof TRPCError) throw e;
-          console.error("Failed to parse lab config for validation:", e);
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Invalid lab defaultRowConfig JSON; cannot validate seat"
+          });
         }
       }
 
@@ -1035,11 +1055,18 @@ export const accountRouter = createTRPCRouter({
         // Check for 15-minute lockout
         const sessionCheck = await tx.session.findUnique({
           where: { id: input.sessionId },
-          select: { startAt: true }
+          select: { startAt: true, labId: true }
         });
 
         if (!sessionCheck) {
           throw new TRPCError({ code: "NOT_FOUND", message: "Session not found" });
+        }
+
+        if (sessionCheck.labId !== input.labId) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Session does not belong to the specified lab"
+          });
         }
 
         const now = new Date();

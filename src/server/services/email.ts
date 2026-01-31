@@ -44,6 +44,16 @@ export interface SendEmailOptions {
   html: string;
 }
 
+const escapeHtml = (text: string | null | undefined) => {
+  if (!text) return "";
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+};
+
 export const sendEmail = async (options: SendEmailOptions) => {
   if (!transporter) {
     console.log("Email not sent (transporter not configured):", options.subject);
@@ -78,7 +88,7 @@ export const sendStudentReminderEmail = async (
   }
 ) => {
   const equipmentList = sessionDetails.equipment
-    ?.map((e) => `<li>${e.name} (x${e.amount})</li>`)
+    ?.map((e) => `<li>${escapeHtml(e.name)} (x${e.amount})</li>`)
     .join("") ?? "";
 
   const html = `
@@ -101,15 +111,15 @@ export const sendStudentReminderEmail = async (
           <h1>Lab Session Reminder</h1>
         </div>
         <div class="content">
-          <p>Hi ${studentName},</p>
+          <p>Hi ${escapeHtml(studentName)},</p>
           <p>This is a reminder that your lab session is starting in <span class="highlight">3 hours</span>.</p>
 
           <div class="details">
             <h3>Session Details</h3>
-            <p><strong>Lab:</strong> ${sessionDetails.labName}</p>
+            <p><strong>Lab:</strong> ${escapeHtml(sessionDetails.labName)}</p>
             <p><strong>Date:</strong> ${formatDate(sessionDetails.startAt)}</p>
             <p><strong>Time:</strong> ${formatTime(sessionDetails.startAt)} - ${formatTime(sessionDetails.endAt)}</p>
-            <p><strong>Your Seat:</strong> ${sessionDetails.seatName}</p>
+            <p><strong>Your Seat:</strong> ${escapeHtml(sessionDetails.seatName)}</p>
             ${equipmentList
       ? `<p><strong>Equipment Reserved:</strong></p><ul>${equipmentList}</ul>`
       : ""
@@ -155,23 +165,15 @@ export const sendTeacherSummaryEmail = async (
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
   const attendanceUrl = `${appUrl}/attendance/${sessionDetails.sessionId}`;
 
-  const escapeHtml = (text: string | null | undefined) => {
-    if (!text) return "";
-    return text
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#039;");
-  };
+  // const escapeHtml... removed, using global
 
   const studentRows = sessionDetails.students
     .map(
       (s) =>
         `<tr>
-            <td style="padding: 8px; border-bottom: 1px solid #eee;">${s.name}</td>
-            <td style="padding: 8px; border-bottom: 1px solid #eee;">${s.seatName}</td>
-            <td style="padding: 8px; border-bottom: 1px solid #eee;">${s.equipment?.map((e) => `${e.name} (x${e.amount})`).join(", ") ?? "-"
+            <td style="padding: 8px; border-bottom: 1px solid #eee;">${escapeHtml(s.name)}</td>
+            <td style="padding: 8px; border-bottom: 1px solid #eee;">${escapeHtml(s.seatName)}</td>
+            <td style="padding: 8px; border-bottom: 1px solid #eee;">${s.equipment?.map((e) => `${escapeHtml(e.name)} (x${e.amount})`).join(", ") ?? "-"
         }</td>
             <td style="padding: 8px; border-bottom: 1px solid #eee; font-style: italic; color: #666;">${escapeHtml(s.notes) || "-"}</td>
           </tr>`
@@ -179,7 +181,7 @@ export const sendTeacherSummaryEmail = async (
     .join("");
 
   const equipmentSummary = sessionDetails.totalEquipmentNeeds
-    .map((e) => `<li>${e.name}: <strong>${e.totalAmount}</strong> units needed</li>`)
+    .map((e) => `<li>${escapeHtml(e.name)}: <strong>${e.totalAmount}</strong> units needed</li>`)
     .join("");
 
   const html = `
@@ -205,10 +207,10 @@ export const sendTeacherSummaryEmail = async (
             <p style="margin: 0; opacity: 0.9;">15 minutes until your session begins</p>
           </div>
           <div class="content">
-            <p>Hi ${teacherName},</p>
+            <p>Hi ${escapeHtml(teacherName)},</p>
             <p>Your lab session is about to start. Here's your session summary:</p>
   
-            <p><strong>Lab:</strong> ${sessionDetails.labName}<br>
+            <p><strong>Lab:</strong> ${escapeHtml(sessionDetails.labName)}<br>
             <strong>Time:</strong> ${formatTime(sessionDetails.startAt)} - ${formatTime(sessionDetails.endAt)}<br>
             <strong>Date:</strong> ${formatDate(sessionDetails.startAt)}<br>
             <strong>Total Students:</strong> ${sessionDetails.students.length}</p>
@@ -273,7 +275,7 @@ export const sendBookingConfirmationEmail = async (
 ) => {
   const isPending = bookingDetails.status === "PENDING_APPROVAL";
   const equipmentList = bookingDetails.equipment
-    ?.map((e) => `<li>${e.name} (x${e.amount})</li>`)
+    ?.map((e) => `<li>${escapeHtml(e.name)} (x${e.amount})</li>`)
     .join("") ?? "";
 
   const html = `
@@ -298,7 +300,7 @@ export const sendBookingConfirmationEmail = async (
           <h1>${isPending ? "Booking Pending Approval" : "Booking Confirmed"}</h1>
         </div>
         <div class="content">
-          <p>Hi ${studentName},</p>
+          <p>Hi ${escapeHtml(studentName)},</p>
           ${isPending
       ? "<p>Your booking has been submitted and is <strong>pending teacher approval</strong>. You will be notified once it's reviewed.</p>"
       : "<p>Your lab session booking has been <strong>confirmed</strong>!</p>"
@@ -306,10 +308,10 @@ export const sendBookingConfirmationEmail = async (
 
           <div class="details">
             <p><strong>Status:</strong> <span class="status ${isPending ? "status-pending" : "status-confirmed"}">${isPending ? "Pending Approval" : "Confirmed"}</span></p>
-            <p><strong>Lab:</strong> ${bookingDetails.labName}</p>
+            <p><strong>Lab:</strong> ${escapeHtml(bookingDetails.labName)}</p>
             <p><strong>Date:</strong> ${formatDate(bookingDetails.startAt)}</p>
             <p><strong>Time:</strong> ${formatTime(bookingDetails.startAt)} - ${formatTime(bookingDetails.endAt)}</p>
-            <p><strong>Seat:</strong> ${bookingDetails.seatName}</p>
+            <p><strong>Seat:</strong> ${escapeHtml(bookingDetails.seatName)}</p>
             ${equipmentList
       ? `<p><strong>Equipment Reserved:</strong></p><ul>${equipmentList}</ul>`
       : ""
@@ -369,13 +371,13 @@ export const sendBookingStatusEmail = async (
           <h1>Booking ${statusText}</h1>
         </div>
         <div class="content">
-          <p>Hi ${studentName},</p>
+          <p>Hi ${escapeHtml(studentName)},</p>
           <p>Your lab booking has been <strong>${statusText}</strong>.</p>
           <div class="details">
-            <p><strong>Lab:</strong> ${bookingDetails.labName}</p>
+            <p><strong>Lab:</strong> ${escapeHtml(bookingDetails.labName)}</p>
             <p><strong>Date:</strong> ${formatDate(bookingDetails.startAt)}</p>
             <p><strong>Time:</strong> ${formatTime(bookingDetails.startAt)} - ${formatTime(bookingDetails.endAt)}</p>
-            <p><strong>Seat:</strong> ${bookingDetails.seatName}</p>
+            <p><strong>Seat:</strong> ${escapeHtml(bookingDetails.seatName)}</p>
           </div>
           <div class="footer">
             <p>The Global College Lab Reservation System</p>
@@ -422,13 +424,13 @@ export const sendTeacherBookingRequestEmail = async (
           <h1>Booking Approval Needed</h1>
         </div>
         <div class="content">
-          <p>Hi ${teacherName},</p>
-          <p>${bookingDetails.studentName} has requested a booking.</p>
+          <p>Hi ${escapeHtml(teacherName)},</p>
+          <p>${escapeHtml(bookingDetails.studentName)} has requested a booking.</p>
           <div class="details">
-            <p><strong>Lab:</strong> ${bookingDetails.labName}</p>
+            <p><strong>Lab:</strong> ${escapeHtml(bookingDetails.labName)}</p>
             <p><strong>Date:</strong> ${formatDate(bookingDetails.startAt)}</p>
             <p><strong>Time:</strong> ${formatTime(bookingDetails.startAt)} - ${formatTime(bookingDetails.endAt)}</p>
-            <p><strong>Seat:</strong> ${bookingDetails.seatName}</p>
+            <p><strong>Seat:</strong> ${escapeHtml(bookingDetails.seatName)}</p>
           </div>
         </div>
       </div>
