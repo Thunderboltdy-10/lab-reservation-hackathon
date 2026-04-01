@@ -16,7 +16,7 @@
 		"postinstall": "prisma generate",
 		"preview": "next build && next start",
 		"start": "next start",
-		"typecheck": "next typegen && tsc --noEmit"
+		"typecheck": "mkdir -p .next/types && next typegen && tsc --noEmit"
 	},
 	"dependencies": {
 		"@clerk/nextjs": "^6.33.2",

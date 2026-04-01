@@ -6,6 +6,7 @@ import {
 } from "@/server/services/email";
 import type { Role } from "@prisma/client";
 import { TRPCError } from "@trpc/server";
+import { fromZonedTime, toZonedTime } from "date-fns-tz";
 import z from "zod";
 import {
 	adminProcedure,
@@ -13,6 +14,9 @@ import {
 	privateProcedure,
 	teacherProcedure,
 } from "../trpc";
+
+const APP_TIMEZONE = process.env.NEXT_PUBLIC_TIMEZONE ?? "Europe/Madrid";
+const DAY_IN_MS = 24 * 60 * 60 * 1000;
 
 const getTotalSeatsFromConfig = (configJson?: string | null) => {
 	if (!configJson) return 0;
@@ -31,12 +35,22 @@ const getTotalSeatsFromConfig = (configJson?: string | null) => {
 
 const getDayWindow = (date: Date) => {
 	const dayStart = new Date(date);
-	dayStart.setHours(0, 0, 0, 0);
-
-	const nextDay = new Date(dayStart);
-	nextDay.setDate(nextDay.getDate() + 1);
+	const nextDay = new Date(dayStart.getTime() + DAY_IN_MS);
 
 	return { dayStart, nextDay };
+};
+
+const getTimezoneDayWindow = (date: Date, timeZone = APP_TIMEZONE) => {
+	const zonedDate = toZonedTime(date, timeZone);
+	zonedDate.setHours(0, 0, 0, 0);
+
+	const nextZonedDate = new Date(zonedDate);
+	nextZonedDate.setDate(nextZonedDate.getDate() + 1);
+
+	return {
+		dayStart: fromZonedTime(zonedDate, timeZone),
+		nextDay: fromZonedTime(nextZonedDate, timeZone),
+	};
 };
 
 const assertBookingWindowOpen = (startAt: Date) => {
@@ -1579,10 +1593,8 @@ export const accountRouter = createTRPCRouter({
 		}
 
 		const now = new Date();
-		const todayStart = new Date(now);
-		todayStart.setHours(0, 0, 0, 0);
-		const todayEnd = new Date(todayStart);
-		todayEnd.setDate(todayEnd.getDate() + 1);
+		const { dayStart: todayStart, nextDay: todayEnd } =
+			getTimezoneDayWindow(now);
 		const expiringSoon = new Date(now);
 		expiringSoon.setDate(expiringSoon.getDate() + 30);
 
@@ -1780,6 +1792,37 @@ export const accountRouter = createTRPCRouter({
 		}
 
 		const managedSessionWhere = buildManagedSessionWhere(user.role, user.id);
+		const usageBacklogSessions = await ctx.db.session.findMany({
+			where: {
+				endAt: { lt: now },
+				equipmentBookings: {
+					some: {
+						actualUsed: null,
+					},
+				},
+				...managedSessionWhere,
+			},
+			select: {
+				id: true,
+				startAt: true,
+				endAt: true,
+				lab: { select: { name: true } },
+				equipmentBookings: {
+					where: {
+						actualUsed: null,
+					},
+					select: {
+						id: true,
+						userId: true,
+					},
+				},
+			},
+			orderBy: {
+				endAt: "desc",
+			},
+			take: 5,
+		});
+
 		const pendingApprovalCount = await ctx.db.seatBooking.count({
 			where: {
 				status: "PENDING_APPROVAL",
@@ -1897,7 +1940,7 @@ export const accountRouter = createTRPCRouter({
 					todaySessionsCount: todaySessions.length,
 					pendingApprovalCount,
 					attendanceBacklogCount,
-					pendingUsageReportsCount: pendingUsageReports.length,
+					pendingUsageReportsCount: usageBacklogSessions.length,
 					expiringEquipmentCount: expiringEquipment.length,
 				},
 				todaySessions: todaySessions.map((session) => ({
@@ -1914,6 +1957,16 @@ export const accountRouter = createTRPCRouter({
 					unitType: equipment.unitType,
 					expirationDate: equipment.expirationDate,
 					labName: equipment.lab.name,
+				})),
+				usageBacklogSessions: usageBacklogSessions.map((session) => ({
+					id: session.id,
+					labName: session.lab.name,
+					startAt: session.startAt,
+					endAt: session.endAt,
+					missingReportCount: session.equipmentBookings.length,
+					missingStudentCount: new Set(
+						session.equipmentBookings.map((booking) => booking.userId),
+					).size,
 				})),
 				recentUsageSessions: recentUsageSessions.map((session) => {
 					const reserved = session.equipmentBookings.reduce(

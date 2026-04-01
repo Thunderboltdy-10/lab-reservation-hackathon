@@ -478,6 +478,54 @@ export default function DashboardPage() {
 							<Card>
 								<CardHeader>
 									<CardTitle className="flex items-center gap-2">
+										<TestTubeDiagonal className="h-4 w-4" />
+										Usage Reporting Backlog
+									</CardTitle>
+									<CardDescription>
+										Finished sessions still missing student equipment usage
+										reports.
+									</CardDescription>
+								</CardHeader>
+								<CardContent className="space-y-3">
+									{overview.teacher?.usageBacklogSessions.length ? (
+										overview.teacher.usageBacklogSessions.map((session) => (
+											<div
+												key={session.id}
+												className="rounded-2xl border border-border/60 bg-muted/30 p-4"
+											>
+												<div className="flex flex-wrap items-center justify-between gap-3">
+													<div>
+														<p className="font-medium">{session.labName} Lab</p>
+														<p className="mt-1 text-muted-foreground text-sm">
+															{formatDate(new Date(session.startAt))} ·{" "}
+															{formatTimeRange(
+																new Date(session.startAt),
+																new Date(session.endAt),
+															)}
+														</p>
+													</div>
+													<div className="flex flex-wrap gap-2 text-xs">
+														<Badge variant="outline">
+															{session.missingStudentCount} students missing
+														</Badge>
+														<Badge variant="outline">
+															{session.missingReportCount} reports pending
+														</Badge>
+													</div>
+												</div>
+											</div>
+										))
+									) : (
+										<div className="rounded-2xl border border-border/70 border-dashed p-6 text-center text-muted-foreground text-sm">
+											No managed sessions are waiting on usage reporting.
+										</div>
+									)}
+								</CardContent>
+							</Card>
+
+							<Card>
+								<CardHeader>
+									<CardTitle className="flex items-center gap-2">
 										<History className="h-4 w-4" />
 										Recent Equipment Reconciliation
 									</CardTitle>
