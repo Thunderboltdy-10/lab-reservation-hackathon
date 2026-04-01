@@ -8,8 +8,8 @@ import { attendanceRouter } from "./routers/attendance";
  * All routers added in /api/routers should be manually added here.
  */
 export const appRouter = createTRPCRouter({
-  account: accountRouter,
-  attendance: attendanceRouter,
+	account: accountRouter,
+	attendance: attendanceRouter,
 });
 
 // export type definition of API

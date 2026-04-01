@@ -1,10 +1,5 @@
-import CalendarGeneral from "./_components/calendarGeneral";
+import DashboardPage from "./dashboard/page";
 
-
-export default async function Home() {
-	return (
-        <div className="h-screen flex justify-center items-center">
-            <CalendarGeneral/>
-        </div>
-    )
+export default function Home() {
+	return <DashboardPage />;
 }

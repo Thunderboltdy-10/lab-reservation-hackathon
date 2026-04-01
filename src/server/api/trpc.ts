@@ -6,7 +6,7 @@
  * TL;DR - This is where all the tRPC server stuff is created and plugged in. The pieces you will
  * need to use are documented accordingly near the end.
  */
-import { initTRPC, TRPCError } from "@trpc/server";
+import { TRPCError, initTRPC } from "@trpc/server";
 import superjson from "superjson";
 import { ZodError } from "zod";
 
@@ -27,9 +27,9 @@ import type { Role } from "@prisma/client";
  * @see https://trpc.io/docs/server/context
  */
 export const createTRPCContext = async (opts: { headers: Headers }) => {
-    const user = await auth()
+	const user = await auth();
 	return {
-        auth: user,
+		auth: user,
 		db,
 		...opts,
 	};
@@ -101,97 +101,97 @@ const timingMiddleware = t.middleware(async ({ next, path }) => {
 });
 
 const isAuthed = t.middleware(({ next, ctx }) => {
-  if (!ctx.auth?.userId) {
-    throw new TRPCError({
-      code: "UNAUTHORIZED",
-      message: "You must be logged in to access this resource",
-    });
-  }
-  return next({
-    ctx: {
-      ...ctx,
-      auth: ctx.auth as Required<typeof ctx.auth>,
-    },
-  });
+	if (!ctx.auth?.userId) {
+		throw new TRPCError({
+			code: "UNAUTHORIZED",
+			message: "You must be logged in to access this resource",
+		});
+	}
+	return next({
+		ctx: {
+			...ctx,
+			auth: ctx.auth as Required<typeof ctx.auth>,
+		},
+	});
 });
 
 /**
  * Middleware that checks if the user has TEACHER or ADMIN role
  */
 const isTeacherOrAdmin = t.middleware(async ({ next, ctx }) => {
-  if (!ctx.auth?.userId) {
-    throw new TRPCError({
-      code: "UNAUTHORIZED",
-      message: "You must be logged in to access this resource",
-    });
-  }
+	if (!ctx.auth?.userId) {
+		throw new TRPCError({
+			code: "UNAUTHORIZED",
+			message: "You must be logged in to access this resource",
+		});
+	}
 
-  const user = await ctx.db.user.findUnique({
-    where: { id: ctx.auth.userId },
-    select: { role: true },
-  });
+	const user = await ctx.db.user.findUnique({
+		where: { id: ctx.auth.userId },
+		select: { role: true },
+	});
 
-  if (!user) {
-    throw new TRPCError({
-      code: "NOT_FOUND",
-      message: "User not found",
-    });
-  }
+	if (!user) {
+		throw new TRPCError({
+			code: "NOT_FOUND",
+			message: "User not found",
+		});
+	}
 
-  const allowedRoles: Role[] = ["TEACHER", "ADMIN"];
-  if (!allowedRoles.includes(user.role)) {
-    throw new TRPCError({
-      code: "FORBIDDEN",
-      message: "You must be a teacher or admin to access this resource",
-    });
-  }
+	const allowedRoles: Role[] = ["TEACHER", "ADMIN"];
+	if (!allowedRoles.includes(user.role)) {
+		throw new TRPCError({
+			code: "FORBIDDEN",
+			message: "You must be a teacher or admin to access this resource",
+		});
+	}
 
-  return next({
-    ctx: {
-      ...ctx,
-      auth: ctx.auth as Required<typeof ctx.auth>,
-      userRole: user.role,
-    },
-  });
+	return next({
+		ctx: {
+			...ctx,
+			auth: ctx.auth as Required<typeof ctx.auth>,
+			userRole: user.role,
+		},
+	});
 });
 
 /**
  * Middleware that checks if the user has ADMIN role only
  */
 const isAdmin = t.middleware(async ({ next, ctx }) => {
-  if (!ctx.auth?.userId) {
-    throw new TRPCError({
-      code: "UNAUTHORIZED",
-      message: "You must be logged in to access this resource",
-    });
-  }
+	if (!ctx.auth?.userId) {
+		throw new TRPCError({
+			code: "UNAUTHORIZED",
+			message: "You must be logged in to access this resource",
+		});
+	}
 
-  const user = await ctx.db.user.findUnique({
-    where: { id: ctx.auth.userId },
-    select: { role: true },
-  });
+	const user = await ctx.db.user.findUnique({
+		where: { id: ctx.auth.userId },
+		select: { role: true },
+	});
 
-  if (!user) {
-    throw new TRPCError({
-      code: "NOT_FOUND",
-      message: "User not found",
-    });
-  }
+	if (!user) {
+		throw new TRPCError({
+			code: "NOT_FOUND",
+			message: "User not found",
+		});
+	}
 
-  if (user.role !== "ADMIN") {
-    throw new TRPCError({
-      code: "FORBIDDEN",
-      message: "You must be an admin to access this resource",
-    });
-  }
+	if (user.role !== "ADMIN") {
+		throw new TRPCError({
+			code: "FORBIDDEN",
+			message: "You must be an admin to access this resource",
+		});
+	}
 
-  return next({
-    ctx: {
-      ...ctx,
-      auth: ctx.auth as Required<typeof ctx.auth>,
-      userRole: user.role,
-    },
-  });
+	return next({
+		ctx: {
+			...ctx,
+			auth: ctx.auth as Required<typeof ctx.auth>,
+			userRole: user.role,
+		},
+	});
 });
 
 /**

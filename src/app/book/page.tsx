@@ -1,20 +1,17 @@
-"use client"
+"use client";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import LabSelection from "../_components/labSelection";
 
 export default function Book() {
-    const [lab, setLab] = useState<null | "physics" | "biology">(null)
+	const [lab, setLab] = useState<null | "physics" | "biology">(null);
 
-    const router = useRouter();
+	const router = useRouter();
 
-    useEffect(() => {
-        if (lab === null) return
-        console.log(lab)
-        router.push("/book/"+lab)
-    }, [lab])
+	useEffect(() => {
+		if (lab === null) return;
+		router.push(`/book/${lab}`);
+	}, [lab, router]);
 
-    return (
-        <LabSelection setLab={setLab}/>
-    )
+	return <LabSelection setLab={setLab} />;
 }
