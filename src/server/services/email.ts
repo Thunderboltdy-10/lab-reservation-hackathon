@@ -1,97 +1,101 @@
-import nodemailer from "nodemailer";
 import { db } from "@/server/db";
+import nodemailer from "nodemailer";
 
 // Create transporter using Gmail
 const createTransporter = () => {
-  if (!process.env.EMAIL_USER || !process.env.EMAIL_APP_PASSWORD) {
-    console.warn("Email credentials not configured. Emails will not be sent.");
-    return null;
-  }
+	if (!process.env.EMAIL_USER || !process.env.EMAIL_APP_PASSWORD) {
+		console.warn("Email credentials not configured. Emails will not be sent.");
+		return null;
+	}
 
-  return nodemailer.createTransport({
-    service: "gmail",
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_APP_PASSWORD,
-    },
-  });
+	return nodemailer.createTransport({
+		service: "gmail",
+		auth: {
+			user: process.env.EMAIL_USER,
+			pass: process.env.EMAIL_APP_PASSWORD,
+		},
+	});
 };
 
 const transporter = createTransporter();
 
 // Email templates
 const formatDate = (date: Date) => {
-  return date.toLocaleDateString("en-GB", {
-    weekday: "long",
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-    timeZone: process.env.NEXT_PUBLIC_TIMEZONE ?? "Europe/Madrid",
-  });
+	return date.toLocaleDateString("en-GB", {
+		weekday: "long",
+		year: "numeric",
+		month: "long",
+		day: "numeric",
+		timeZone: process.env.NEXT_PUBLIC_TIMEZONE ?? "Europe/Madrid",
+	});
 };
 
 const formatTime = (date: Date) => {
-  return date.toLocaleTimeString("en-GB", {
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone: process.env.NEXT_PUBLIC_TIMEZONE ?? "Europe/Madrid",
-  });
+	return date.toLocaleTimeString("en-GB", {
+		hour: "2-digit",
+		minute: "2-digit",
+		timeZone: process.env.NEXT_PUBLIC_TIMEZONE ?? "Europe/Madrid",
+	});
 };
 
 export interface SendEmailOptions {
-  to: string;
-  subject: string;
-  html: string;
+	to: string;
+	subject: string;
+	html: string;
 }
 
 const escapeHtml = (text: string | null | undefined) => {
-  if (!text) return "";
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
+	if (!text) return "";
+	return text
+		.replace(/&/g, "&amp;")
+		.replace(/</g, "&lt;")
+		.replace(/>/g, "&gt;")
+		.replace(/"/g, "&quot;")
+		.replace(/'/g, "&#039;");
 };
 
 export const sendEmail = async (options: SendEmailOptions) => {
-  if (!transporter) {
-    console.log("Email not sent (transporter not configured):", options.subject);
-    return { success: false, reason: "transporter_not_configured" };
-  }
+	if (!transporter) {
+		console.log(
+			"Email not sent (transporter not configured):",
+			options.subject,
+		);
+		return { success: false, reason: "transporter_not_configured" };
+	}
 
-  try {
-    await transporter.sendMail({
-      from: `"TGC Lab Reservations" <${process.env.EMAIL_USER}>`,
-      to: options.to,
-      subject: options.subject,
-      html: options.html,
-    });
-    console.log("Email sent successfully to:", options.to);
-    return { success: true };
-  } catch (error) {
-    console.error("Failed to send email:", error);
-    return { success: false, reason: "send_failed", error };
-  }
+	try {
+		await transporter.sendMail({
+			from: `"TGC Lab Reservations" <${process.env.EMAIL_USER}>`,
+			to: options.to,
+			subject: options.subject,
+			html: options.html,
+		});
+		console.log("Email sent successfully to:", options.to);
+		return { success: true };
+	} catch (error) {
+		console.error("Failed to send email:", error);
+		return { success: false, reason: "send_failed", error };
+	}
 };
 
 // Student reminder email (3 hours before session)
 export const sendStudentReminderEmail = async (
-  studentEmail: string,
-  studentName: string,
-  sessionDetails: {
-    labName: string;
-    seatName: string;
-    startAt: Date;
-    endAt: Date;
-    equipment?: { name: string; amount: number }[];
-  }
+	studentEmail: string,
+	studentName: string,
+	sessionDetails: {
+		labName: string;
+		seatName: string;
+		startAt: Date;
+		endAt: Date;
+		equipment?: { name: string; amount: number }[];
+	},
 ) => {
-  const equipmentList = sessionDetails.equipment
-    ?.map((e) => `<li>${escapeHtml(e.name)} (x${e.amount})</li>`)
-    .join("") ?? "";
+	const equipmentList =
+		sessionDetails.equipment
+			?.map((e) => `<li>${escapeHtml(e.name)} (x${e.amount})</li>`)
+			.join("") ?? "";
 
-  const html = `
+	const html = `
     <!DOCTYPE html>
     <html>
     <head>
@@ -120,10 +124,11 @@ export const sendStudentReminderEmail = async (
             <p><strong>Date:</strong> ${formatDate(sessionDetails.startAt)}</p>
             <p><strong>Time:</strong> ${formatTime(sessionDetails.startAt)} - ${formatTime(sessionDetails.endAt)}</p>
             <p><strong>Your Seat:</strong> ${escapeHtml(sessionDetails.seatName)}</p>
-            ${equipmentList
-      ? `<p><strong>Equipment Reserved:</strong></p><ul>${equipmentList}</ul>`
-      : ""
-    }
+            ${
+							equipmentList
+								? `<p><strong>Equipment Reserved:</strong></p><ul>${equipmentList}</ul>`
+								: ""
+						}
           </div>
 
           <p>Please arrive on time and bring any necessary materials.</p>
@@ -137,54 +142,60 @@ export const sendStudentReminderEmail = async (
     </html>
   `;
 
-  return sendEmail({
-    to: studentEmail,
-    subject: `Reminder: Lab Session in ${sessionDetails.labName} - ${formatTime(sessionDetails.startAt)}`,
-    html,
-  });
+	return sendEmail({
+		to: studentEmail,
+		subject: `Reminder: Lab Session in ${sessionDetails.labName} - ${formatTime(sessionDetails.startAt)}`,
+		html,
+	});
 };
 
 // Teacher summary email (15 minutes before session)
 export const sendTeacherSummaryEmail = async (
-  teacherEmail: string,
-  teacherName: string,
-  sessionDetails: {
-    sessionId: string;
-    labName: string;
-    startAt: Date;
-    endAt: Date;
-    students: {
-      name: string;
-      seatName: string;
-      notes?: string | null;  // Added notes field
-      equipment?: { name: string; amount: number }[];
-    }[];
-    totalEquipmentNeeds: { name: string; totalAmount: number }[];
-  }
+	teacherEmail: string,
+	teacherName: string,
+	sessionDetails: {
+		sessionId: string;
+		labName: string;
+		startAt: Date;
+		endAt: Date;
+		students: {
+			name: string;
+			seatName: string;
+			notes?: string | null; // Added notes field
+			equipment?: { name: string; amount: number }[];
+		}[];
+		totalEquipmentNeeds: { name: string; totalAmount: number }[];
+	},
 ) => {
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-  const attendanceUrl = `${appUrl}/attendance/${sessionDetails.sessionId}`;
+	const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+	const attendanceUrl = `${appUrl}/attendance/${sessionDetails.sessionId}`;
 
-  // const escapeHtml... removed, using global
+	// const escapeHtml... removed, using global
 
-  const studentRows = sessionDetails.students
-    .map(
-      (s) =>
-        `<tr>
+	const studentRows = sessionDetails.students
+		.map(
+			(s) =>
+				`<tr>
             <td style="padding: 8px; border-bottom: 1px solid #eee;">${escapeHtml(s.name)}</td>
             <td style="padding: 8px; border-bottom: 1px solid #eee;">${escapeHtml(s.seatName)}</td>
-            <td style="padding: 8px; border-bottom: 1px solid #eee;">${s.equipment?.map((e) => `${escapeHtml(e.name)} (x${e.amount})`).join(", ") ?? "-"
-        }</td>
+            <td style="padding: 8px; border-bottom: 1px solid #eee;">${
+							s.equipment
+								?.map((e) => `${escapeHtml(e.name)} (x${e.amount})`)
+								.join(", ") ?? "-"
+						}</td>
             <td style="padding: 8px; border-bottom: 1px solid #eee; font-style: italic; color: #666;">${escapeHtml(s.notes) || "-"}</td>
-          </tr>`
-    )
-    .join("");
+          </tr>`,
+		)
+		.join("");
 
-  const equipmentSummary = sessionDetails.totalEquipmentNeeds
-    .map((e) => `<li>${escapeHtml(e.name)}: <strong>${e.totalAmount}</strong> units needed</li>`)
-    .join("");
+	const equipmentSummary = sessionDetails.totalEquipmentNeeds
+		.map(
+			(e) =>
+				`<li>${escapeHtml(e.name)}: <strong>${e.totalAmount}</strong> units needed</li>`,
+		)
+		.join("");
 
-  const html = `
+	const html = `
       <!DOCTYPE html>
       <html>
       <head>
@@ -219,15 +230,16 @@ export const sendTeacherSummaryEmail = async (
               <a href="${attendanceUrl}" class="btn">Mark Attendance</a>
             </div>
   
-            ${equipmentSummary
-      ? `
+            ${
+							equipmentSummary
+								? `
               <div class="equipment-box">
                 <h3 style="margin-top: 0;">Equipment Needed</h3>
                 <ul>${equipmentSummary}</ul>
               </div>
             `
-      : ""
-    }
+								: ""
+						}
   
             <h3>Student List</h3>
             <table class="table">
@@ -253,32 +265,33 @@ export const sendTeacherSummaryEmail = async (
     </html>
   `;
 
-  return sendEmail({
-    to: teacherEmail,
-    subject: `Starting Soon: ${sessionDetails.labName} Session (${sessionDetails.students.length} students)`,
-    html,
-  });
+	return sendEmail({
+		to: teacherEmail,
+		subject: `Starting Soon: ${sessionDetails.labName} Session (${sessionDetails.students.length} students)`,
+		html,
+	});
 };
 
 // Booking confirmation email
 export const sendBookingConfirmationEmail = async (
-  studentEmail: string,
-  studentName: string,
-  bookingDetails: {
-    labName: string;
-    seatName: string;
-    startAt: Date;
-    endAt: Date;
-    status: string;
-    equipment?: { name: string; amount: number }[];
-  }
+	studentEmail: string,
+	studentName: string,
+	bookingDetails: {
+		labName: string;
+		seatName: string;
+		startAt: Date;
+		endAt: Date;
+		status: string;
+		equipment?: { name: string; amount: number }[];
+	},
 ) => {
-  const isPending = bookingDetails.status === "PENDING_APPROVAL";
-  const equipmentList = bookingDetails.equipment
-    ?.map((e) => `<li>${escapeHtml(e.name)} (x${e.amount})</li>`)
-    .join("") ?? "";
+	const isPending = bookingDetails.status === "PENDING_APPROVAL";
+	const equipmentList =
+		bookingDetails.equipment
+			?.map((e) => `<li>${escapeHtml(e.name)} (x${e.amount})</li>`)
+			.join("") ?? "";
 
-  const html = `
+	const html = `
     <!DOCTYPE html>
     <html>
     <head>
@@ -301,10 +314,11 @@ export const sendBookingConfirmationEmail = async (
         </div>
         <div class="content">
           <p>Hi ${escapeHtml(studentName)},</p>
-          ${isPending
-      ? "<p>Your booking has been submitted and is <strong>pending teacher approval</strong>. You will be notified once it's reviewed.</p>"
-      : "<p>Your lab session booking has been <strong>confirmed</strong>!</p>"
-    }
+          ${
+						isPending
+							? "<p>Your booking has been submitted and is <strong>pending teacher approval</strong>. You will be notified once it's reviewed.</p>"
+							: "<p>Your lab session booking has been <strong>confirmed</strong>!</p>"
+					}
 
           <div class="details">
             <p><strong>Status:</strong> <span class="status ${isPending ? "status-pending" : "status-confirmed"}">${isPending ? "Pending Approval" : "Confirmed"}</span></p>
@@ -312,10 +326,11 @@ export const sendBookingConfirmationEmail = async (
             <p><strong>Date:</strong> ${formatDate(bookingDetails.startAt)}</p>
             <p><strong>Time:</strong> ${formatTime(bookingDetails.startAt)} - ${formatTime(bookingDetails.endAt)}</p>
             <p><strong>Seat:</strong> ${escapeHtml(bookingDetails.seatName)}</p>
-            ${equipmentList
-      ? `<p><strong>Equipment Reserved:</strong></p><ul>${equipmentList}</ul>`
-      : ""
-    }
+            ${
+							equipmentList
+								? `<p><strong>Equipment Reserved:</strong></p><ul>${equipmentList}</ul>`
+								: ""
+						}
           </div>
 
           <div class="footer">
@@ -327,32 +342,32 @@ export const sendBookingConfirmationEmail = async (
     </html>
   `;
 
-  return sendEmail({
-    to: studentEmail,
-    subject: `${isPending ? "Pending: " : ""}Lab Booking - ${bookingDetails.labName} on ${formatDate(bookingDetails.startAt)}`,
-    html,
-  });
+	return sendEmail({
+		to: studentEmail,
+		subject: `${isPending ? "Pending: " : ""}Lab Booking - ${bookingDetails.labName} on ${formatDate(bookingDetails.startAt)}`,
+		html,
+	});
 };
 
 export const sendBookingStatusEmail = async (
-  studentEmail: string,
-  studentName: string,
-  bookingDetails: {
-    labName: string;
-    seatName: string;
-    startAt: Date;
-    endAt: Date;
-  },
-  status: "APPROVED" | "REJECTED" | "CANCELLED"
+	studentEmail: string,
+	studentName: string,
+	bookingDetails: {
+		labName: string;
+		seatName: string;
+		startAt: Date;
+		endAt: Date;
+	},
+	status: "APPROVED" | "REJECTED" | "CANCELLED",
 ) => {
-  const statusText =
-    status === "APPROVED"
-      ? "approved"
-      : status === "REJECTED"
-        ? "rejected"
-        : "cancelled";
+	const statusText =
+		status === "APPROVED"
+			? "approved"
+			: status === "REJECTED"
+				? "rejected"
+				: "cancelled";
 
-  const html = `
+	const html = `
     <!DOCTYPE html>
     <html>
     <head>
@@ -388,25 +403,25 @@ export const sendBookingStatusEmail = async (
     </html>
   `;
 
-  return sendEmail({
-    to: studentEmail,
-    subject: `Lab Booking ${statusText}: ${bookingDetails.labName} on ${formatDate(bookingDetails.startAt)}`,
-    html,
-  });
+	return sendEmail({
+		to: studentEmail,
+		subject: `Lab Booking ${statusText}: ${bookingDetails.labName} on ${formatDate(bookingDetails.startAt)}`,
+		html,
+	});
 };
 
 export const sendTeacherBookingRequestEmail = async (
-  teacherEmail: string,
-  teacherName: string,
-  bookingDetails: {
-    studentName: string;
-    labName: string;
-    seatName: string;
-    startAt: Date;
-    endAt: Date;
-  }
+	teacherEmail: string,
+	teacherName: string,
+	bookingDetails: {
+		studentName: string;
+		labName: string;
+		seatName: string;
+		startAt: Date;
+		endAt: Date;
+	},
 ) => {
-  const html = `
+	const html = `
     <!DOCTYPE html>
     <html>
     <head>
@@ -438,79 +453,87 @@ export const sendTeacherBookingRequestEmail = async (
     </html>
   `;
 
-  return sendEmail({
-    to: teacherEmail,
-    subject: `Approval needed: ${bookingDetails.labName} booking request`,
-    html,
-  });
+	return sendEmail({
+		to: teacherEmail,
+		subject: `Approval needed: ${bookingDetails.labName} booking request`,
+		html,
+	});
 };
 
 // Get upcoming sessions that need reminders
 export const getSessionsNeedingReminders = async () => {
-  const now = new Date();
+	const now = new Date();
 
-  // 3 hour window for student reminders (between 2:55 and 3:05 hours before)
-  const threeHoursFromNow = new Date(now.getTime() + 3 * 60 * 60 * 1000);
-  const studentReminderWindowStart = new Date(threeHoursFromNow.getTime() - 5 * 60 * 1000);
-  const studentReminderWindowEnd = new Date(threeHoursFromNow.getTime() + 5 * 60 * 1000);
+	// 3 hour window for student reminders (between 2:55 and 3:05 hours before)
+	const threeHoursFromNow = new Date(now.getTime() + 3 * 60 * 60 * 1000);
+	const studentReminderWindowStart = new Date(
+		threeHoursFromNow.getTime() - 5 * 60 * 1000,
+	);
+	const studentReminderWindowEnd = new Date(
+		threeHoursFromNow.getTime() + 5 * 60 * 1000,
+	);
 
-  // 15 minute window for teacher reminders (between 10 and 20 minutes before)
-  const fifteenMinutesFromNow = new Date(now.getTime() + 15 * 60 * 1000);
-  const teacherReminderWindowStart = new Date(fifteenMinutesFromNow.getTime() - 5 * 60 * 1000);
-  const teacherReminderWindowEnd = new Date(fifteenMinutesFromNow.getTime() + 5 * 60 * 1000);
+	// 15 minute window for teacher reminders (between 10 and 20 minutes before)
+	const fifteenMinutesFromNow = new Date(now.getTime() + 15 * 60 * 1000);
+	const teacherReminderWindowStart = new Date(
+		fifteenMinutesFromNow.getTime() - 5 * 60 * 1000,
+	);
+	const teacherReminderWindowEnd = new Date(
+		fifteenMinutesFromNow.getTime() + 5 * 60 * 1000,
+	);
 
-  // Sessions for student reminders (3 hours before)
-  const sessionsForStudentReminders = await db.session.findMany({
-    where: {
-      startAt: {
-        gte: studentReminderWindowStart,
-        lte: studentReminderWindowEnd,
-      },
-      studentReminderSentAt: null,
-    },
-    include: {
-      lab: { select: { name: true } },
-      seatBookings: {
-        where: { status: "CONFIRMED" },
-        include: {
-          user: { select: { email: true, firstName: true, lastName: true } },
-          seat: { select: { name: true } },
-          equipmentBookings: {
-            include: { equipment: { select: { name: true } } },
-          },
-        },
-      },
-    },
-  });
+	// Sessions for student reminders (3 hours before)
+	const sessionsForStudentReminders = await db.session.findMany({
+		where: {
+			startAt: {
+				gte: studentReminderWindowStart,
+				lte: studentReminderWindowEnd,
+			},
+			studentReminderSentAt: null,
+		},
+		include: {
+			lab: { select: { name: true } },
+			seatBookings: {
+				where: { status: "CONFIRMED" },
+				include: {
+					user: { select: { email: true, firstName: true, lastName: true } },
+					seat: { select: { name: true } },
+					equipmentBookings: {
+						include: { equipment: { select: { name: true } } },
+					},
+				},
+			},
+		},
+	});
 
-  // Sessions for teacher reminders (15 minutes before)
-  const sessionsForTeacherReminders = await db.session.findMany({
-    where: {
-      startAt: {
-        gte: teacherReminderWindowStart,
-        lte: teacherReminderWindowEnd,
-      },
-      teacherReminderSentAt: null,
-    },
-    include: {
-      lab: { select: { name: true } },
-      createdBy: { select: { email: true, firstName: true, lastName: true } },
-      seatBookings: {
-        where: { status: "CONFIRMED" },
-        select: {
-          notes: true, // Include notes for teacher summary
-          user: { select: { firstName: true, lastName: true } },
-          seat: { select: { name: true } },
-          equipmentBookings: {
-            include: { equipment: { select: { name: true } } },
-          },
-        },
-      },
-    },
-  });
+	// Sessions for teacher reminders (15 minutes before)
+	const sessionsForTeacherReminders = await db.session.findMany({
+		where: {
+			startAt: {
+				gte: teacherReminderWindowStart,
+				lte: teacherReminderWindowEnd,
+			},
+			teacherReminderSentAt: null,
+		},
+		include: {
+			lab: { select: { name: true } },
+			createdBy: { select: { email: true, firstName: true, lastName: true } },
+			seatBookings: {
+				where: { status: "CONFIRMED" },
+				select: {
+					notes: true, // Include notes for teacher summary
+					user: { select: { firstName: true, lastName: true } },
+					seat: { select: { name: true } },
+					equipmentBookings: {
+						include: { equipment: { select: { name: true } } },
+					},
+				},
+			},
+		},
+	});
 
-  return {
-    studentReminders: sessionsForStudentReminders,
-    teacherReminders: sessionsForTeacherReminders,
-  };
+	return {
+		studentReminders: sessionsForStudentReminders,
+		teacherReminders: sessionsForTeacherReminders,
+	};
 };

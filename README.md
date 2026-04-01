@@ -1,29 +1,89 @@
-# Create T3 App
+# Lab Reservation and Management
 
-This is a [T3 Stack](https://create.t3.gg/) project bootstrapped with `create-t3-app`.
+School-ready lab operations platform built with Next.js, Clerk, Prisma, tRPC, and PostgreSQL.
 
-## What's next? How do I make an app with this?
+It now covers:
 
-We try to keep this project as simple as possible, so you can start with just the scaffolding we set up for you, and add additional things later when they become necessary.
+- Seat reservations with session capacity enforcement
+- Equipment allocation per session
+- Equipment usage reporting after sessions end
+- Attendance tracking and backlog review
+- Teacher approval workflows for restricted students
+- Reminder and summary emails for students and teachers
+- Teacher operations dashboard for approvals, attendance, expiring stock, and reconciliation
 
-If you are not familiar with the different technologies used in this project, please refer to the respective docs. If you still are in the wind, please join our [Discord](https://t3.gg/discord) and ask for help.
+## Core Setup
 
-- [Next.js](https://nextjs.org)
-- [NextAuth.js](https://next-auth.js.org)
-- [Prisma](https://prisma.io)
-- [Drizzle](https://orm.drizzle.team)
-- [Tailwind CSS](https://tailwindcss.com)
-- [tRPC](https://trpc.io)
+1. Install dependencies:
 
-## Learn More
+```bash
+npm install
+```
 
-To learn more about the [T3 Stack](https://create.t3.gg/), take a look at the following resources:
+2. Configure environment variables in `.env`:
 
-- [Documentation](https://create.t3.gg/)
-- [Learn the T3 Stack](https://create.t3.gg/en/faq#what-learning-resources-are-currently-available) — Check out these awesome tutorials
+```bash
+DATABASE_URL=postgresql://...
+CLERK_SECRET_KEY=...
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=...
+CLERK_WEBHOOK_SECRET=...
 
-You can check out the [create-t3-app GitHub repository](https://github.com/t3-oss/create-t3-app) — your feedback and contributions are welcome!
+EMAIL_USER=your-gmail-address
+EMAIL_APP_PASSWORD=your-gmail-app-password
+NEXT_PUBLIC_APP_URL=https://your-school-domain.example
+NEXT_PUBLIC_TIMEZONE=Europe/Madrid
+CRON_SECRET=replace-this
+```
 
-## How do I deploy this?
+3. Apply the database schema:
 
-Follow our deployment guides for [Vercel](https://create.t3.gg/en/deployment/vercel), [Netlify](https://create.t3.gg/en/deployment/netlify) and [Docker](https://create.t3.gg/en/deployment/docker) for more information.
+```bash
+npm run db:push
+```
+
+4. Start development:
+
+```bash
+npm run dev
+```
+
+## Verification
+
+Run these before deployment:
+
+```bash
+npm run typecheck
+npm run build
+```
+
+`npm run check` currently reports many pre-existing Biome formatting/class-order issues across the repo. Those are not the same as runtime or type failures.
+
+## Email and Cron
+
+The reminder endpoint is:
+
+```text
+/api/cron/session-reminders
+```
+
+It expects:
+
+- `Authorization: Bearer <CRON_SECRET>`
+
+Recommended schedule:
+
+- Every 5 minutes
+
+Email behavior:
+
+- Students receive a reminder around 3 hours before a confirmed session
+- Teachers receive a summary around 15 minutes before a session
+- Booking confirmation, approval, rejection, and cancellation emails are sent when those events occur
+
+## Operational Notes
+
+- Students cannot change or cancel bookings inside the 15-minute lock window before the session starts.
+- Teachers can only approve, reject, unbook, or mark attendance for sessions they manage. Admins can manage all sessions.
+- Completed sessions with attendance or booking history are protected from deletion to preserve records.
+- Equipment with booking or session history is protected from deletion to preserve inventory history.
+- Actual equipment usage must be reported after a session ends and cannot exceed the originally booked amount.
