@@ -17,6 +17,7 @@ import {
 	Users,
 	X,
 } from "lucide-react";
+import { type EquipmentUnit } from "@prisma/client";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -64,6 +65,25 @@ const formatAttendanceTone = (value: number) => {
 	if (value >= 80) return "default" as const;
 	if (value >= 60) return "secondary" as const;
 	return "destructive" as const;
+};
+
+const formatEquipmentUnit = (unitType: EquipmentUnit) => {
+	switch (unitType) {
+		case "ML":
+			return "mL";
+		case "L":
+			return "L";
+		case "G":
+			return "g";
+		case "MG":
+			return "mg";
+		case "BOX":
+			return "boxes";
+		case "TABLETS":
+			return "tablets";
+		default:
+			return "units";
+	}
 };
 
 const getBookingStatusBadge = (status: string) => {
@@ -588,10 +608,10 @@ export default function DashboardPage() {
 													<div className="flex items-start justify-between gap-3">
 														<div>
 															<p className="font-medium">{item.name}</p>
-															<p className="mt-1 text-muted-foreground text-sm">
-																{item.labName} Lab · {item.total}{" "}
-																{item.unitType === "ML" ? "mL" : "units"}
-															</p>
+																<p className="mt-1 text-muted-foreground text-sm">
+																	{item.labName} Lab · {item.total}{" "}
+																	{formatEquipmentUnit(item.unitType)}
+																</p>
 														</div>
 														<Badge
 															variant={
@@ -823,7 +843,7 @@ export default function DashboardPage() {
 																	</p>
 																	<p className="mt-1 text-muted-foreground text-sm">
 																		Booked {item.amount}{" "}
-																		{item.unitType === "ML" ? "mL" : "units"}
+																		{formatEquipmentUnit(item.unitType)}
 																	</p>
 																</div>
 																<Badge variant="outline">Required</Badge>

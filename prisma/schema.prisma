@@ -169,6 +169,9 @@ model Equipment {
 
   sessionAvailability SessionEquipment[]
   bookings            EquipmentBooking[]
+
+  @@index([labId, category])
+  @@index([expirationDate])
 }
 
 model SessionEquipment {
@@ -216,12 +219,14 @@ model Notification {
   userId    String
   user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   type      NotificationType
+  sessionId String?
   title     String
   message   String
   link      String?
   read      Boolean          @default(false)
   createdAt DateTime         @default(now())
 
+  @@unique([userId, type, sessionId])
   @@index([userId, read])
   @@index([userId, createdAt])
 }

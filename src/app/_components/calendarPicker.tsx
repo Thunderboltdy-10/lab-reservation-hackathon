@@ -92,6 +92,7 @@ const CalendarPicker = ({
 	const [endAuto, setEndAuto] = React.useState(true);
 
 	const [isPopupOpenAdd, setIsPopupOpenAdd] = useState(false);
+	const [, setLockTick] = useState(0);
 
 	const [booking, setBooking] = useAtom(isBookingAtom);
 	const [equipment, setEquipment] = useAtom(equipmentAtom);
@@ -296,10 +297,18 @@ const CalendarPicker = ({
 
 	const controlsLocked = booking !== null || equipment !== null;
 
+	useEffect(() => {
+		const interval = setInterval(() => {
+			setLockTick((value) => value + 1);
+		}, 30000);
+
+		return () => clearInterval(interval);
+	}, []);
+
 	const isSessionLocked = (startAt: Date) => {
-		const now = new Date();
-		const lockTime = new Date(startAt.getTime() - 15 * 60 * 1000);
-		return now > lockTime;
+		const nowMs = Date.now();
+		const lockThresholdMs = startAt.getTime() - 15 * 60 * 1000;
+		return nowMs >= lockThresholdMs;
 	};
 
 	return (
@@ -393,10 +402,13 @@ const CalendarPicker = ({
 							</div>
 						</div>
 					)}
-					{data?.map((sess) => (						<div key={sess.id}>
-							<div className="flex flex-col">
-								<div
-									className={`relative w-full rounded-lg border bg-card p-1 text-center ${
+						{data?.map((sess) => {
+							const locked = isSessionLocked(new Date(sess.startAt)) && !isTeacher;
+							return (
+								<div key={sess.id}>
+								<div className="flex flex-col">
+									<div
+										className={`relative w-full rounded-lg border bg-card p-1 text-center ${
 										booking === sess.id || equipment === sess.id
 											? "ring-2 ring-primary"
 											: ""
@@ -414,26 +426,26 @@ const CalendarPicker = ({
 										{sess.createdBy.lastName}
 									</div>
 									<div className="mt-3 grid grid-cols-2 gap-2 p-2">
-										{booking !== sess.id ? (
-											<Button
-												className="flex-1"
-												variant={isSessionLocked(new Date(sess.startAt)) && !isTeacher ? "outline" : "secondary"}
-												onClick={() => {
-													if (equipment !== null) {
-														toast.error(
+											{booking !== sess.id ? (
+												<Button
+													className="flex-1"
+													variant={locked ? "outline" : "secondary"}
+													onClick={() => {
+														if (equipment !== null) {
+															toast.error(
 															"Finish session equipment first to book a seat",
 														);
 														return;
 													}
 													setEquipment(null);
-													setBooking(sess.id);
-													toast("Press esc to cancel booking");
-												}}
-												disabled={equipment !== null || (isSessionLocked(new Date(sess.startAt)) && !isTeacher)}
-											>
-												{isSessionLocked(new Date(sess.startAt)) && !isTeacher ? "Locked" : "Book"}
-											</Button>
-										) : (
+														setBooking(sess.id);
+														toast("Press esc to cancel booking");
+													}}
+													disabled={equipment !== null || locked}
+												>
+													{locked ? "Locked" : "Book"}
+												</Button>
+											) : (
 											<Button
 												className="flex-1"
 												onClick={() => setBooking(null)}
@@ -595,7 +607,8 @@ const CalendarPicker = ({
 								</div>
 							</div>
 						</div>
-					))}
+							);
+						})}
 				</div>
 				</div>
 			</div>

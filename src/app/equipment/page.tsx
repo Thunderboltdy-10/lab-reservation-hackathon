@@ -80,9 +80,45 @@ export default function EquipmentPage() {
 		expirationDate: Date | null;
         category: string;
         casNumber: string;
-        brand: string;
-        location: string;
-	} | null>(null);
+	        brand: string;
+	        location: string;
+		} | null>(null);
+
+	// Query labs to get IDs
+	const { data: physicsLabData } = api.account.getLabId.useQuery({ lab: "physics" });
+	const { data: biologyLabData } = api.account.getLabId.useQuery({ lab: "biology" });
+
+	const physicsLabOption = useMemo(() => {
+		if (!physicsLabData?.id) return null;
+		return {
+			id: physicsLabData.id,
+			label: "Physics / Chemistry Lab",
+			location: physicsLabData.name,
+		};
+	}, [physicsLabData]);
+
+	const biologyLabOption = useMemo(() => {
+		if (!biologyLabData?.id) return null;
+		return {
+			id: biologyLabData.id,
+			label: "Biology Lab",
+			location: biologyLabData.name,
+		};
+	}, [biologyLabData]);
+
+	const labOptions = useMemo(() => {
+		return [physicsLabOption, biologyLabOption].filter((option): option is NonNullable<typeof option> => Boolean(option));
+	}, [physicsLabOption, biologyLabOption]);
+
+	const activeLabOption = useMemo(() => {
+		if (selectedLab === "physics" && physicsLabOption) return physicsLabOption;
+		if (selectedLab === "biology" && biologyLabOption) return biologyLabOption;
+		return physicsLabOption ?? biologyLabOption ?? null;
+	}, [selectedLab, physicsLabOption, biologyLabOption]);
+
+	const resolvedLabIds = useMemo(() => {
+		return new Set(labOptions.map((option) => option.id));
+	}, [labOptions]);
 
 	// Form state
 	const [newName, setNewName] = useState("");
@@ -92,8 +128,8 @@ export default function EquipmentPage() {
     const [newCategory, setNewCategory] = useState("General Organic");
     const [newCasNumber, setNewCasNumber] = useState("");
     const [newBrand, setNewBrand] = useState("");
-    const [newLocation, setNewLocation] = useState("Chem Lab");
-    const [addLabId, setAddLabId] = useState<string>("");
+    const [newLocation, setNewLocation] = useState(activeLabOption?.location ?? "");
+    const [addLabId, setAddLabId] = useState<string>(activeLabOption?.id ?? "");
     
     // Pagination / Infinite scroll state
     const [visibleCount, setVisibleCount] = useState(20);
@@ -112,10 +148,6 @@ export default function EquipmentPage() {
         setVisibleCount(20);
     }, [searchQuery, categoryFilter, selectedLab]);
 
-	// Query labs to get IDs
-	const { data: physicsLabData } = api.account.getLabId.useQuery({ lab: "physics" });
-	const { data: biologyLabData } = api.account.getLabId.useQuery({ lab: "biology" });
-
 	const { data: equipment, refetch } = api.account.getLabEquipment.useQuery(
 		{ labId: selectedLab === "all" ? undefined : selectedLab === "physics" ? physicsLabData?.id : biologyLabData?.id },
 		{ 
@@ -129,13 +161,18 @@ export default function EquipmentPage() {
 	const updateMutation = api.account.updateLabEquipment.useMutation();
 	const deleteMutation = api.account.deleteLabEquipment.useMutation();
 
+	const addLabIdIsResolved = resolvedLabIds.has(addLabId);
+
 	const handleAdd = () => {
-        const labToUse = addLabId || physicsLabData?.id;
-		if (!labToUse || !newName.trim()) return;
+		if (!newName.trim()) return;
+		if (!addLabIdIsResolved) {
+			toast.error("Select a valid lab before saving.");
+			return;
+		}
 
 		addMutation.mutate(
 			{
-				labId: labToUse,
+				labId: addLabId,
 				name: newName.trim(),
 				total: newTotal,
 				unitType: newUnitType,
@@ -156,8 +193,8 @@ export default function EquipmentPage() {
 					toast.error(error.message);
 				},
 			},
-		);
-	};
+			);
+		};
 
     const resetAddForm = () => {
         setNewName("");
@@ -167,9 +204,15 @@ export default function EquipmentPage() {
         setNewCategory("General Organic");
         setNewCasNumber("");
         setNewBrand("");
-        setNewLocation("Chem Lab");
-        setAddLabId("");
+        setNewLocation(activeLabOption?.location ?? "");
+        setAddLabId(activeLabOption?.id ?? "");
     };
+
+	useEffect(() => {
+		if (!isAddDialogOpen || !activeLabOption) return;
+		setAddLabId(activeLabOption.id);
+		setNewLocation(activeLabOption.location);
+	}, [activeLabOption, isAddDialogOpen]);
 
 	const handleUpdate = () => {
 		if (!editingEquipment) return;
@@ -257,12 +300,18 @@ export default function EquipmentPage() {
 						Manage and track all laboratory equipment and chemicals across facilities.
 					</p>
 				</div>
-				<Dialog open={isAddDialogOpen} onOpenChange={(open) => {
-                    setIsAddDialogOpen(open);
-                    if (open && !addLabId && physicsLabData) {
-                        setAddLabId(physicsLabData.id);
-                    }
-                }}>
+				<Dialog
+					open={isAddDialogOpen}
+					onOpenChange={(open) => {
+						setIsAddDialogOpen(open);
+						if (open) {
+							setAddLabId(activeLabOption?.id ?? "");
+							setNewLocation(activeLabOption?.location ?? "");
+							return;
+						}
+						resetAddForm();
+					}}
+				>
 					<DialogTrigger asChild>
 						<Button className="rounded-xl shadow-sm">
 							<Plus className="mr-2 h-4 w-4" />
@@ -277,18 +326,31 @@ export default function EquipmentPage() {
 							</DialogDescription>
 						</DialogHeader>
 						<div className="space-y-4 py-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div className="space-y-2 col-span-2">
-								<Label htmlFor="target-lab">Target Lab</Label>
-								<Select value={addLabId} onValueChange={setAddLabId}>
-                                    <SelectTrigger id="target-lab" className="rounded-xl">
-                                        <SelectValue placeholder="Select lab to assign to" />
-                                    </SelectTrigger>
-                                    <SelectContent className="rounded-xl">
-                                        <SelectItem value={physicsLabData?.id || "physics"}>Physics / Chemistry Lab</SelectItem>
-                                        <SelectItem value={biologyLabData?.id || "biology"}>Biology Lab</SelectItem>
-                                    </SelectContent>
-                                </Select>
-							</div>
+								<div className="space-y-2 col-span-2">
+									<Label htmlFor="target-lab">Target Lab</Label>
+									<Select
+										value={addLabId}
+										onValueChange={setAddLabId}
+										disabled={labOptions.length === 0}
+									>
+	                                    <SelectTrigger id="target-lab" className="rounded-xl">
+	                                        <SelectValue placeholder="Select lab to assign to" />
+	                                    </SelectTrigger>
+	                                    <SelectContent className="rounded-xl">
+	                                        {labOptions.length === 0 ? (
+												<SelectItem value="loading-labs" disabled>
+													Loading labs...
+												</SelectItem>
+											) : (
+												labOptions.map((option) => (
+													<SelectItem key={option.id} value={option.id}>
+														{option.label}
+													</SelectItem>
+												))
+											)}
+	                                    </SelectContent>
+	                                </Select>
+								</div>
 
 							<div className="space-y-2 col-span-2 md:col-span-1">
 								<Label htmlFor="name">Item Name <span className="text-destructive">*</span></Label>
@@ -324,8 +386,8 @@ export default function EquipmentPage() {
 									placeholder="e.g., 1310-73-2"
 								/>
 							</div>
-                            <div className="space-y-2 col-span-2 md:col-span-1">
-								<Label htmlFor="brand">Brand</Label>
+	                            <div className="space-y-2 col-span-2 md:col-span-1">
+									<Label htmlFor="brand">Brand</Label>
 								<Input
 									id="brand"
 									list="eq-brands"
@@ -334,12 +396,22 @@ export default function EquipmentPage() {
 									onChange={(e) => setNewBrand(e.target.value)}
 									placeholder="e.g., PanReac"
 								/>
-								<datalist id="eq-brands">
-									{brands.map(b => <option key={b} value={b} />)}
-								</datalist>
-							</div>
-							
-                            <div className="space-y-2">
+									<datalist id="eq-brands">
+										{brands.map(b => <option key={b} value={b} />)}
+									</datalist>
+								</div>
+	                            <div className="space-y-2 col-span-2 md:col-span-1">
+									<Label htmlFor="location">Location</Label>
+									<Input
+										id="location"
+	                                    className="rounded-xl"
+										value={newLocation}
+										onChange={(e) => setNewLocation(e.target.value)}
+										placeholder="e.g., Cabinet A / Shelf 2"
+									/>
+								</div>
+
+	                            <div className="space-y-2">
                                 <Label htmlFor="unit-type">Unit Type <span className="text-destructive">*</span></Label>
                                 <Select
                                     value={newUnitType}
@@ -359,16 +431,17 @@ export default function EquipmentPage() {
                             </div>
                             <div className="space-y-2">
                                 <Label htmlFor="total">Quantity <span className="text-destructive">*</span></Label>
-                                <Input
-                                    id="total"
-                                    type="number"
-                                    min={0}
-                                    className="rounded-xl"
-                                    value={newTotal}
-                                    onChange={(e) =>
-                                        setNewTotal(Number.parseFloat(e.target.value) || 0)
-                                    }
-                                />
+	                                <Input
+	                                    id="total"
+	                                    type="number"
+	                                    min={0}
+	                                    step={1}
+	                                    className="rounded-xl"
+	                                    value={newTotal}
+	                                    onChange={(e) =>
+	                                        setNewTotal(Math.max(0, Number.parseInt(e.target.value, 10) || 0))
+	                                    }
+	                                />
                             </div>
 							
 							<div className="space-y-2 col-span-2">
@@ -390,12 +463,12 @@ export default function EquipmentPage() {
 							>
 								Cancel
 							</Button>
-							<Button 
-                                onClick={handleAdd} 
-                                disabled={!newName.trim() || !addLabId}
-                                className="rounded-xl"
-                            >
-								Save Item
+								<Button
+	                                onClick={handleAdd}
+	                                disabled={!newName.trim() || !addLabIdIsResolved || addMutation.isPending}
+	                                className="rounded-xl"
+	                            >
+									Save Item
 							</Button>
 						</DialogFooter>
 					</DialogContent>
@@ -637,16 +710,17 @@ export default function EquipmentPage() {
                                                                 </div>
                                                                 <div className="space-y-2">
                                                                     <Label htmlFor="edit-total">Quantity</Label>
-                                                                    <Input
-                                                                        id="edit-total"
-                                                                        type="number"
-                                                                        min={0}
-                                                                        className="rounded-xl"
-                                                                        value={editingEquipment?.total ?? 0}
-                                                                        onChange={(e) =>
-                                                                            setEditingEquipment((prev) => prev ? { ...prev, total: Number.parseFloat(e.target.value) || 0 } : null)
-                                                                        }
-                                                                    />
+	                                                                    <Input
+	                                                                        id="edit-total"
+	                                                                        type="number"
+	                                                                        min={0}
+	                                                                        step={1}
+	                                                                        className="rounded-xl"
+	                                                                        value={editingEquipment?.total ?? 0}
+	                                                                        onChange={(e) =>
+	                                                                            setEditingEquipment((prev) => prev ? { ...prev, total: Math.max(0, Number.parseInt(e.target.value, 10) || 0) } : null)
+	                                                                        }
+	                                                                    />
                                                                 </div>
                                                                 <div className="space-y-2 col-span-2">
                                                                     <Label htmlFor="edit-expiration">Expiry Date</Label>

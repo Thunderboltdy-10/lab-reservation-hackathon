@@ -257,21 +257,37 @@
 
 /* Booking mode (blue in light, lime in dark) — slow, steady beacon pulse */
 .outline-blue {
-	animation: bookingPulse 2.8s ease-in-out infinite;
+	position: relative;
 }
-.dark .outline-blue {
-	animation: bookingPulseDark 2.8s ease-in-out infinite;
+.outline-blue::before {
+	content: "";
+	position: absolute;
+	inset: 0;
+	border-radius: inherit;
+	pointer-events: none;
+	animation: booking-pulse 2.8s ease-in-out infinite;
+}
+.dark .outline-blue::before {
+	animation: booking-pulse-dark 2.8s ease-in-out infinite;
 }
 
 /* Equipment edit mode (green in light, lime in dark) — quicker, sharper pulse */
 .outline-green {
-	animation: equipmentPulse 1.9s ease-in-out infinite;
+	position: relative;
 }
-.dark .outline-green {
-	animation: equipmentPulseDark 1.9s ease-in-out infinite;
+.outline-green::before {
+	content: "";
+	position: absolute;
+	inset: 0;
+	border-radius: inherit;
+	pointer-events: none;
+	animation: equipment-pulse 1.9s ease-in-out infinite;
+}
+.dark .outline-green::before {
+	animation: equipment-pulse-dark 1.9s ease-in-out infinite;
 }
 
-@keyframes bookingPulse {
+@keyframes booking-pulse {
 	0%, 100% {
 		box-shadow:
 			0 0 0 2px rgba(0, 48, 135, 0.45),
@@ -286,7 +302,7 @@
 	}
 }
 
-@keyframes bookingPulseDark {
+@keyframes booking-pulse-dark {
 	0%, 100% {
 		box-shadow:
 			0 0 0 2px rgba(179, 220, 60, 0.45),
@@ -301,7 +317,7 @@
 	}
 }
 
-@keyframes equipmentPulse {
+@keyframes equipment-pulse {
 	0%, 100% {
 		box-shadow:
 			0 0 0 2px rgba(90, 160, 0, 0.40),
@@ -316,7 +332,7 @@
 	}
 }
 
-@keyframes equipmentPulseDark {
+@keyframes equipment-pulse-dark {
 	0%, 100% {
 		box-shadow:
 			0 0 0 2px rgba(179, 220, 60, 0.40),

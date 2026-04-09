@@ -2424,7 +2424,7 @@ export const accountRouter = createTRPCRouter({
 			z.object({
 				labId: z.string(),
 				name: z.string(),
-				total: z.number(),
+				total: z.number().int().nonnegative(),
 				expirationDate: z.date().optional(),
 				unitType: z.enum(["UNIT", "ML", "G", "MG", "L", "BOX", "TABLETS"]),
 				category: z.string().optional(),
@@ -2542,7 +2542,7 @@ export const accountRouter = createTRPCRouter({
 			z.object({
 				id: z.string(),
 				name: z.string().optional(),
-				total: z.number().optional(),
+				total: z.number().int().nonnegative().optional(),
 				unitType: z.enum(["UNIT", "ML", "G", "MG", "L", "BOX", "TABLETS"]).optional(),
 				expirationDate: z.date().nullish(),
 				category: z.string().optional(),
@@ -2916,6 +2916,12 @@ export const accountRouter = createTRPCRouter({
 			const updated = await ctx.db.equipmentBooking.update({
 				where: { id: input.equipmentBookingId },
 				data: {
+					...(booking.actualUsed === null
+						? {
+								actualUsed: input.correctedUsed,
+								reportedAt: new Date(),
+							}
+						: {}),
 					correctedUsed: input.correctedUsed,
 					correctedBy: ctx.auth.userId,
 					correctedAt: new Date(),

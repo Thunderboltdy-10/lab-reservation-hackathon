@@ -57,7 +57,7 @@ import { api } from "@/trpc/react";
 import { UserButton } from "@clerk/nextjs";
 import { formatDistanceToNow } from "date-fns";
 import { useTheme } from "next-themes";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 const notificationTypeLabel: Record<string, string> = {
@@ -74,6 +74,7 @@ const notificationTypeLabel: Record<string, string> = {
 
 function NotificationBell({ compact = false }: { compact?: boolean }) {
 	const utils = api.useUtils();
+	const router = useRouter();
 	const { data: unreadData, refetch } = api.notifications.getUnreadCount.useQuery(undefined, {
 		refetchInterval: 60000, // Poll every minute
 	});
@@ -100,11 +101,17 @@ function NotificationBell({ compact = false }: { compact?: boolean }) {
 	};
 
 	return (
-		<Popover onOpenChange={handleOpen}>
-			<PopoverTrigger asChild>
-				<Button variant="ghost" size="icon" className="relative" title="Notifications">
-					<Bell className="h-5 w-5" />
-					{unreadCount > 0 && (
+			<Popover onOpenChange={handleOpen}>
+				<PopoverTrigger asChild>
+					<Button
+						variant="ghost"
+						size="icon"
+						className="relative"
+						title="Notifications"
+						aria-label="Notifications"
+					>
+						<Bell className="h-5 w-5" />
+						{unreadCount > 0 && (
 						<span className="absolute -top-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-[10px] font-bold text-destructive-foreground">
 							{unreadCount > 9 ? "9+" : unreadCount}
 						</span>
@@ -137,14 +144,26 @@ function NotificationBell({ compact = false }: { compact?: boolean }) {
 						</div>
 					) : (
 						notifications.map((n) => (
-							<button
-								type="button"
-								key={n.id}
-								onClick={() => {
-									if (!n.read) markRead.mutate({ id: n.id });
-									if (n.link) window.location.href = n.link;
-								}}
-								className={`w-full text-left px-4 py-3 hover:bg-muted/50 transition-colors ${n.read ? "opacity-60" : ""}`}
+								<button
+									type="button"
+									key={n.id}
+									onClick={async () => {
+										if (!n.read) {
+											try {
+												await markRead.mutateAsync({ id: n.id });
+											} catch {
+												// Non-fatal for navigation.
+											}
+										}
+
+										if (!n.link) return;
+										if (n.link.startsWith("/")) {
+											router.push(n.link);
+											return;
+										}
+										window.location.href = n.link;
+									}}
+									className={`w-full text-left px-4 py-3 hover:bg-muted/50 transition-colors ${n.read ? "opacity-60" : ""}`}
 							>
 								<div className="flex items-start gap-2">
 									{!n.read && <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-primary" />}

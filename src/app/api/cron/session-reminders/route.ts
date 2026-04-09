@@ -6,6 +6,7 @@ import {
 	sendTeacherSummaryEmail,
 	sendUsageReportRequestEmail,
 } from "@/server/services/email";
+import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 
 // This route should be called by a cron job (e.g., Vercel Cron, every 5 minutes)
@@ -142,53 +143,82 @@ export async function GET(request: Request) {
 			usageGroups.set(key, group);
 		}
 
-		const usageEmailsSent = { count: 0 };
-		for (const group of usageGroups.values()) {
-			const first = group[0];
-			if (!first) continue;
-			// Only send once — use a notification to prevent repeat sends
-			const alreadyNotified = await db.notification.findFirst({
-				where: {
-					userId: first.userId,
-					type: "USAGE_REPORT_NEEDED",
-					message: { contains: first.sessionId },
-				},
-			});
-			if (alreadyNotified) continue;
+			const usageEmailsSent = { count: 0 };
+			for (const group of usageGroups.values()) {
+				const first = group[0];
+				if (!first) continue;
 
-			try {
-				await sendUsageReportRequestEmail(
-					first.user.email,
-					`${first.user.firstName} ${first.user.lastName}`,
-					{
-						labName: first.session.lab.name,
-						startAt: first.session.startAt,
-						endAt: first.session.endAt,
-						equipmentItems: group.map((r) => ({
-							name: r.equipment.name,
-							amount: r.amount,
-						})),
-					},
-				);
+				let claimNotification:
+					| {
+							id: string;
+					  }
+					| undefined;
+				try {
+					claimNotification = await db.notification.create({
+						data: {
+							userId: first.userId,
+							type: "USAGE_REPORT_NEEDED",
+							sessionId: first.sessionId,
+							title: "Sending usage report reminder",
+							message: "Usage report reminder email is being sent.",
+							link: "/dashboard",
+						},
+						select: {
+							id: true,
+						},
+					});
+				} catch (error) {
+					if (
+						error instanceof Prisma.PrismaClientKnownRequestError &&
+						error.code === "P2002"
+					) {
+						continue;
+					}
+					throw error;
+				}
+				if (!claimNotification) continue;
 
-				// Create in-app notification so we know we've sent it
-				await db.notification.create({
-					data: {
-						userId: first.userId,
-						type: "USAGE_REPORT_NEEDED",
-						title: "Usage Report Required",
-						message: `Please report your equipment usage for your session in ${first.session.lab.name}. SessionId: ${first.sessionId}`,
-						link: "/dashboard",
-					},
-				});
+				try {
+					const sendResult = await sendUsageReportRequestEmail(
+						first.user.email,
+						`${first.user.firstName} ${first.user.lastName}`,
+						{
+							labName: first.session.lab.name,
+							startAt: first.session.startAt,
+							endAt: first.session.endAt,
+							equipmentItems: group.map((r) => ({
+								name: r.equipment.name,
+								amount: r.amount,
+							})),
+						},
+					);
+					if (!sendResult.success) {
+						throw new Error(
+							`sendUsageReportRequestEmail returned ${sendResult.reason}`,
+						);
+					}
 
-				usageEmailsSent.count++;
-			} catch (error) {
-				results.errors.push(
-					`Failed to send usage report request to ${first.user.email}: ${error}`,
-				);
+					// Finalize the claim only after successful email send.
+					await db.notification.update({
+						where: { id: claimNotification.id },
+						data: {
+							title: "Usage Report Required",
+							message: `Please report your equipment usage for your session in ${first.session.lab.name}. SessionId: ${first.sessionId}`,
+						},
+					});
+
+					usageEmailsSent.count++;
+				} catch (error) {
+					await db.notification
+						.delete({
+							where: { id: claimNotification.id },
+						})
+						.catch(() => undefined);
+					results.errors.push(
+						`Failed to send usage report request to ${first.user.email}: ${error}`,
+					);
+				}
 			}
-		}
 
 		console.log("Cron job completed:", { ...results, usageEmailsSent: usageEmailsSent.count });
 

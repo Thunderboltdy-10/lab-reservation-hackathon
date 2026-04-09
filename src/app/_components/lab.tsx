@@ -709,6 +709,20 @@ const Lab = ({
 		return Array.from(new Set(labEquipment.map(e => e.brand).filter(Boolean))).sort() as string[];
 	}, [labEquipment]);
 
+	const filteredLabEquipment = useMemo(() => {
+		const search = labEquipmentSearch.trim().toLowerCase();
+		return (labEquipment ?? [])
+			.filter((item) => item.name.toLowerCase().includes(search))
+			.slice(0, labEqVisibleCount);
+	}, [labEquipment, labEquipmentSearch, labEqVisibleCount]);
+
+	const filteredSessionLabEquipment = useMemo(() => {
+		const search = sessionEqSearch.trim().toLowerCase();
+		return (labEquipment ?? [])
+			.filter((item) => item.name.toLowerCase().includes(search))
+			.slice(0, sessionEqVisibleCount);
+	}, [labEquipment, sessionEqSearch, sessionEqVisibleCount]);
+
 	const reservedById = useMemo(() => {
 		return new Map(
 			(sessionEquipment ?? []).map((eq) => [eq.equipmentId, eq.reserved]),
@@ -962,14 +976,17 @@ const Lab = ({
 										/>
 									</div>
 								)}
-								{isTeacher &&
-									!booking &&
-									!equipment &&
-									(labEquipment ? (
-										labEquipment
-											.filter(item => item.name.toLowerCase().includes(labEquipmentSearch.toLowerCase()))
-											.slice(0, labEqVisibleCount)
-											.map((item) => (
+									{isTeacher && !booking && !equipment && (
+										labEquipment === undefined ? (
+											<div className="text-center py-4 text-muted-foreground text-xs italic">
+												Loading lab inventory...
+											</div>
+										) : filteredLabEquipment.length === 0 ? (
+											<div className="text-center py-4 text-muted-foreground text-xs italic">
+												No matching equipment
+											</div>
+										) : (
+											filteredLabEquipment.map((item) => (
 												<div
 													key={item.id}
 													className="group flex w-full items-center gap-2 rounded-xl border border-border/40 bg-muted/10 px-3 py-2.5 hover:bg-muted/20 transition-colors"
@@ -980,22 +997,28 @@ const Lab = ({
 															<span className="text-[10px] text-muted-foreground">{item.category}</span>
 														)}
 													</div>
-													<span className="shrink-0 text-xs font-medium text-muted-foreground tabular-nums">{item.total} {unitLabel(item.unitType)}</span>
+													<span className="shrink-0 text-xs font-medium text-muted-foreground tabular-nums">
+														{item.total} {unitLabel(item.unitType)}
+													</span>
 													<Button
 														size="icon"
 														variant="ghost"
 														className="h-7 w-7 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
-														onClick={() => setLabEditItem({
-															id: item.id,
-															name: item.name,
-															total: item.total,
-															unitType: item.unitType,
-															category: item.category ?? '',
-															casNumber: item.casNumber ?? '',
-															brand: item.brand ?? '',
-															location: item.location ?? '',
-															expirationDate: item.expirationDate ? new Date(item.expirationDate) : null,
-														})}
+														onClick={() =>
+															setLabEditItem({
+																id: item.id,
+																name: item.name,
+																total: item.total,
+																unitType: item.unitType,
+																category: item.category ?? "",
+																casNumber: item.casNumber ?? "",
+																brand: item.brand ?? "",
+																location: item.location ?? "",
+																expirationDate: item.expirationDate
+																	? new Date(item.expirationDate)
+																	: null,
+															})
+														}
 														title="Edit"
 													>
 														<PencilIcon className="h-3.5 w-3.5" />
@@ -1014,21 +1037,25 @@ const Lab = ({
 														<AlertDialogContent>
 															<AlertDialogHeader>
 																<AlertDialogTitle>Delete {item.name}?</AlertDialogTitle>
-																<AlertDialogDescription>This will permanently remove this item. Equipment with session history cannot be deleted.</AlertDialogDescription>
+																<AlertDialogDescription>
+																	This will permanently remove this item. Equipment with session history cannot be deleted.
+																</AlertDialogDescription>
 															</AlertDialogHeader>
 															<AlertDialogFooter>
 																<AlertDialogCancel>Cancel</AlertDialogCancel>
-																<AlertDialogAction onClick={() => deleteLabEquipment(item.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Delete</AlertDialogAction>
+																<AlertDialogAction
+																	onClick={() => deleteLabEquipment(item.id)}
+																	className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+																>
+																	Delete
+																</AlertDialogAction>
 															</AlertDialogFooter>
 														</AlertDialogContent>
 													</AlertDialog>
 												</div>
 											))
-									) : (
-										<div className="text-center py-4 text-muted-foreground text-xs italic">
-											No items found
-										</div>
-									))}
+										)
+									)}
 								{equipment !== null && isTeacher && (
 									<div className="space-y-4">
 										<div className="rounded-xl border border-border/60 bg-muted/30 p-4">
@@ -1226,20 +1253,25 @@ const Lab = ({
                                             )}
 											{labEquipment === undefined ? (
 												<div className="py-4 text-center text-muted-foreground text-sm italic">Loading lab equipment...</div>
-											) : labEquipment.length > 0 ? (
+											) : labEquipment.length === 0 ? (
+												<div className="text-muted-foreground text-sm italic">
+													No lab equipment available to add
+												</div>
+											) : filteredSessionLabEquipment.length === 0 ? (
+												<div className="text-muted-foreground text-sm italic">
+													No matching equipment
+												</div>
+											) : (
 												<div className="max-h-56 space-y-2 overflow-y-auto pr-2 custom-scrollbar" onScroll={(e) => {
-                                                    const target = e.target as HTMLDivElement;
-                                                    if (target.scrollTop + target.clientHeight >= target.scrollHeight - 20) {
-                                                        setSessionEqVisibleCount(p => p + 15);
-                                                    }
-                                                }}>
-													{labEquipment
-														.filter((item) => item.name.toLowerCase().includes(sessionEqSearch.toLowerCase()))
-                                                        .slice(0, sessionEqVisibleCount)
-														.map((item) => {
-															const draftEntry = sessionEquipmentDraft.find((eq) => eq.id === item.id);
-															const allocated = draftEntry?.available ?? 0;
-															const remaining = item.total - allocated;
+	                                                    const target = e.target as HTMLDivElement;
+	                                                    if (target.scrollTop + target.clientHeight >= target.scrollHeight - 20) {
+	                                                        setSessionEqVisibleCount(p => p + 15);
+	                                                    }
+	                                                }}>
+														{filteredSessionLabEquipment.map((item) => {
+																const draftEntry = sessionEquipmentDraft.find((eq) => eq.id === item.id);
+																const allocated = draftEntry?.available ?? 0;
+																const remaining = item.total - allocated;
 															const isAdded = !!draftEntry;
 															return (
 																<div
@@ -1296,14 +1328,10 @@ const Lab = ({
 																		)}
 																	</div>
 																</div>
-															);
-														})}
-												</div>
-											) : (
-												<div className="text-muted-foreground text-sm italic">
-													No lab equipment available to add
-												</div>
-											)}
+																);
+															})}
+													</div>
+												)}
 										</div>
 
 										<Button

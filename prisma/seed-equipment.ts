@@ -36,10 +36,12 @@ async function main() {
     const physicsLab = await prisma.lab.findFirst({ where: { name: { contains: 'physics', mode: 'insensitive' } } });
     const biologyLab = await prisma.lab.findFirst({ where: { name: { contains: 'biology', mode: 'insensitive' } } });
 
-    if (!physicsLab || !biologyLab) {
-        console.error("Labs not found!");
-        return;
-    }
+	if (!physicsLab || !biologyLab) {
+		const missingLabs: string[] = [];
+		if (!physicsLab) missingLabs.push("physics");
+		if (!biologyLab) missingLabs.push("biology");
+		throw new Error(`Required labs missing: ${missingLabs.join(", ")}`);
+	}
 
     // Delete existing equipment
     await prisma.sessionEquipment.deleteMany({});
