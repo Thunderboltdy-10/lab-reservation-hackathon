@@ -275,8 +275,8 @@ function MobileNav({ role }: { role: string | undefined }) {
 						<Image
 							src="/logo.png"
 							alt="TGC"
-							width={84}
-							height={84}
+							width={100}
+							height={100}
 							className="rounded-md"
 							priority
 						/>
@@ -430,8 +430,8 @@ export function AppSidebar() {
 								<Image
 									src="/logo.png"
 									alt="TGC"
-									width={150}
-									height={150}
+									width={180}
+									height={180}
 									className="rounded-md dark:brightness-[5] dark:grayscale"
 									priority
 								/>
@@ -447,8 +447,8 @@ export function AppSidebar() {
 								<Image
 									src="/logo.png"
 									alt="TGC"
-									width={60}
-									height={60}
+									width={72}
+									height={72}
 									className="rounded-md dark:brightness-[5] dark:grayscale"
 								/>
 							</div>

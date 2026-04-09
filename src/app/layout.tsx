@@ -7,6 +7,7 @@ import { ClerkProvider } from "@clerk/nextjs";
 import type { Metadata } from "next";
 import { Geist, Inter, Montserrat } from "next/font/google";
 import { AppSidebar } from "./sidebar";
+import { SidebarWrapper } from "./sidebar-wrapper";
 
 export const metadata: Metadata = {
 	title: "Lab Reservation | The Global College",
@@ -91,20 +92,17 @@ export default function RootLayout({
 						},
 					}}
 				>
-					<SidebarProvider>
-						<ThemeProvider
-							attribute="class"
-							defaultTheme="system"
-							enableSystem
-							disableTransitionOnChange
-						>
-							<TRPCReactProvider>
-								<AppSidebar />
-								<main className="flex-1 overflow-auto">{children}</main>
-								<Toaster richColors position="top-center" />
-							</TRPCReactProvider>
-						</ThemeProvider>
-					</SidebarProvider>
+					<ThemeProvider
+						attribute="class"
+						defaultTheme="system"
+						enableSystem
+						disableTransitionOnChange
+					>
+						<TRPCReactProvider>
+							<SidebarWrapper>{children}</SidebarWrapper>
+							<Toaster richColors position="top-center" />
+						</TRPCReactProvider>
+					</ThemeProvider>
 				</ClerkProvider>
 			</body>
 		</html>
