@@ -105,20 +105,23 @@ function MetricCard({
 	icon: typeof Calendar;
 }) {
 	return (
-		<Card className="border-border/60 bg-card/85 shadow-sm">
-			<CardContent className="flex items-start justify-between gap-4 pt-6">
-				<div>
-					<p className="text-muted-foreground text-xs uppercase tracking-[0.22em]">
+		<div className="group relative overflow-hidden rounded-[2rem] border border-border/50 bg-card/40 p-6 transition-all hover:bg-card/60 hover:shadow-lg">
+			<div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
+			<div className="relative z-10 flex items-start justify-between gap-4">
+				<div className="space-y-1">
+					<div className="flex items-center gap-2 text-muted-foreground text-xs uppercase tracking-[0.2em] font-medium">
+						<Icon className="h-4 w-4 text-primary" />
 						{title}
-					</p>
-					<p className="mt-2 font-semibold text-3xl">{value}</p>
-					<p className="mt-1 text-muted-foreground text-sm">{description}</p>
+					</div>
+					<div className="font-bold text-4xl tracking-tight text-foreground mt-2">
+						{value}
+					</div>
+					<div className="text-muted-foreground text-sm pt-2 line-clamp-2">
+						{description}
+					</div>
 				</div>
-				<div className="rounded-2xl border border-primary/20 bg-primary/10 p-3 text-primary">
-					<Icon className="h-5 w-5" />
-				</div>
-			</CardContent>
-		</Card>
+			</div>
+		</div>
 	);
 }
 

@@ -75,12 +75,12 @@ const Seat = ({
 			tabIndex={isClickable ? 0 : -1}
 			aria-disabled={!isClickable}
 			className={cn(
-				"flex h-16 min-w-[84px] flex-col items-center justify-center rounded-lg font-semibold text-sm",
+				"flex h-16 min-w-[84px] flex-col items-center justify-center rounded-xl font-semibold text-sm",
 				"transition-all duration-300 ease-out",
 				getSeatColor(),
 				(!isClickable || disabled) &&
 					"pointer-events-none cursor-default shadow-none",
-				isClickable && "cursor-pointer shadow-md hover:shadow-lg",
+				isClickable && "cursor-pointer shadow-sm hover:shadow-xl hover:-translate-y-1.5 hover:scale-[1.05] ring-offset-background hover:ring-2 hover:ring-offset-2 hover:ring-primary/50",
 				className,
 			)}
 			title={
@@ -204,7 +204,7 @@ const SeatGrid = ({
 				tabIndex={isClickable ? 0 : -1}
 				aria-disabled={!isClickable}
 				className={cn(
-					"flex h-[140px] w-24 flex-col items-center justify-center rounded-lg font-semibold text-sm",
+					"flex h-[140px] w-24 flex-col items-center justify-center rounded-xl font-semibold text-sm",
 					"transition-all duration-300 ease-out",
 					!selectionActive && !isOccupied && !isUserSeat && !isPending
 						? "border border-border/60 bg-muted/70 text-muted-foreground"
@@ -217,7 +217,7 @@ const SeatGrid = ({
 									: "bg-primary text-primary-foreground hover:bg-primary/90",
 					(!isClickable || disabled) &&
 						"pointer-events-none cursor-default shadow-none",
-					isClickable && "cursor-pointer shadow-md hover:shadow-lg",
+					isClickable && "cursor-pointer shadow-sm hover:shadow-xl hover:-translate-y-1.5 hover:scale-[1.05] ring-offset-background hover:ring-2 hover:ring-offset-2 hover:ring-primary/50",
 				)}
 				title={
 					occupantName
