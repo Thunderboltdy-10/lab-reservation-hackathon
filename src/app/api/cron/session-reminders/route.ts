@@ -1,8 +1,10 @@
 import { db } from "@/server/db";
 import {
 	getSessionsNeedingReminders,
+	getSessionsNeedingUsageReports,
 	sendStudentReminderEmail,
 	sendTeacherSummaryEmail,
+	sendUsageReportRequestEmail,
 } from "@/server/services/email";
 import { NextResponse } from "next/server";
 
@@ -126,11 +128,74 @@ export async function GET(request: Request) {
 			}
 		}
 
-		console.log("Cron job completed:", results);
+		// Send usage report requests for recently ended sessions
+		const pendingUsageReports = await getSessionsNeedingUsageReports();
+
+		// Group by user + session to send one email per student per session
+		const usageGroupKey = (r: (typeof pendingUsageReports)[number]) =>
+			`${r.userId}__${r.sessionId}`;
+		const usageGroups = new Map<string, (typeof pendingUsageReports)[number][]>();
+		for (const row of pendingUsageReports) {
+			const key = usageGroupKey(row);
+			const group = usageGroups.get(key) ?? [];
+			group.push(row);
+			usageGroups.set(key, group);
+		}
+
+		const usageEmailsSent = { count: 0 };
+		for (const group of usageGroups.values()) {
+			const first = group[0];
+			if (!first) continue;
+			// Only send once — use a notification to prevent repeat sends
+			const alreadyNotified = await db.notification.findFirst({
+				where: {
+					userId: first.userId,
+					type: "USAGE_REPORT_NEEDED",
+					message: { contains: first.sessionId },
+				},
+			});
+			if (alreadyNotified) continue;
+
+			try {
+				await sendUsageReportRequestEmail(
+					first.user.email,
+					`${first.user.firstName} ${first.user.lastName}`,
+					{
+						labName: first.session.lab.name,
+						startAt: first.session.startAt,
+						endAt: first.session.endAt,
+						equipmentItems: group.map((r) => ({
+							name: r.equipment.name,
+							amount: r.amount,
+						})),
+					},
+				);
+
+				// Create in-app notification so we know we've sent it
+				await db.notification.create({
+					data: {
+						userId: first.userId,
+						type: "USAGE_REPORT_NEEDED",
+						title: "Usage Report Required",
+						message: `Please report your equipment usage for your session in ${first.session.lab.name}. SessionId: ${first.sessionId}`,
+						link: "/dashboard",
+					},
+				});
+
+				usageEmailsSent.count++;
+			} catch (error) {
+				results.errors.push(
+					`Failed to send usage report request to ${first.user.email}: ${error}`,
+				);
+			}
+		}
+
+		console.log("Cron job completed:", { ...results, usageEmailsSent: usageEmailsSent.count });
 
 		return NextResponse.json({
 			success: true,
 			...results,
+			usageEmailsSent: usageEmailsSent.count,
 			timestamp: new Date().toISOString(),
 		});
 	} catch (error) {

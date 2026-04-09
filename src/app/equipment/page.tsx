@@ -233,6 +233,11 @@ export default function EquipmentPage() {
         return Array.from(cats).sort();
     }, [equipment]);
 
+    const brands = useMemo(() => {
+        if (!equipment) return [];
+        return Array.from(new Set(equipment.map(e => e.brand).filter(Boolean))).sort() as string[];
+    }, [equipment]);
+
     const filteredEquipment = useMemo(() => {
         if (!equipment) return [];
         return equipment.filter(item => {
@@ -299,11 +304,15 @@ export default function EquipmentPage() {
 								<Label htmlFor="category">Category</Label>
 								<Input
 									id="category"
+									list="eq-categories"
                                     className="rounded-xl"
 									value={newCategory}
 									onChange={(e) => setNewCategory(e.target.value)}
 									placeholder="e.g., General Organic"
 								/>
+								<datalist id="eq-categories">
+									{categories.map(cat => <option key={cat} value={cat} />)}
+								</datalist>
 							</div>
                             <div className="space-y-2 col-span-2 md:col-span-1">
 								<Label htmlFor="cas">CAS Number</Label>
@@ -319,11 +328,15 @@ export default function EquipmentPage() {
 								<Label htmlFor="brand">Brand</Label>
 								<Input
 									id="brand"
+									list="eq-brands"
                                     className="rounded-xl"
 									value={newBrand}
 									onChange={(e) => setNewBrand(e.target.value)}
 									placeholder="e.g., PanReac"
 								/>
+								<datalist id="eq-brands">
+									{brands.map(b => <option key={b} value={b} />)}
+								</datalist>
 							</div>
 							
                             <div className="space-y-2">
@@ -567,12 +580,16 @@ export default function EquipmentPage() {
                                                                     <Label htmlFor="edit-category">Category</Label>
                                                                     <Input
                                                                         id="edit-category"
+                                                                        list="edit-eq-categories"
                                                                         className="rounded-xl"
                                                                         value={editingEquipment?.category ?? ""}
                                                                         onChange={(e) =>
                                                                             setEditingEquipment((prev) => prev ? { ...prev, category: e.target.value } : null)
                                                                         }
                                                                     />
+                                                                    <datalist id="edit-eq-categories">
+                                                                        {categories.map(cat => <option key={cat} value={cat} />)}
+                                                                    </datalist>
                                                                 </div>
                                                                 <div className="space-y-2 col-span-2 md:col-span-1">
                                                                     <Label htmlFor="edit-cas">CAS Number</Label>
@@ -589,12 +606,16 @@ export default function EquipmentPage() {
                                                                     <Label htmlFor="edit-brand">Brand</Label>
                                                                     <Input
                                                                         id="edit-brand"
+                                                                        list="edit-eq-brands"
                                                                         className="rounded-xl"
                                                                         value={editingEquipment?.brand ?? ""}
                                                                         onChange={(e) =>
                                                                             setEditingEquipment((prev) => prev ? { ...prev, brand: e.target.value } : null)
                                                                         }
                                                                     />
+                                                                    <datalist id="edit-eq-brands">
+                                                                        {brands.map(b => <option key={b} value={b} />)}
+                                                                    </datalist>
                                                                 </div>
                                                                 <div className="space-y-2">
                                                                     <Label htmlFor="edit-unit">Unit Type</Label>

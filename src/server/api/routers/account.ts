@@ -2875,4 +2875,92 @@ export const accountRouter = createTRPCRouter({
 				},
 			});
 		}),
+
+	// Teacher/Admin - correct a student's reported equipment usage
+	correctEquipmentUsage: teacherProcedure
+		.input(
+			z.object({
+				equipmentBookingId: z.string(),
+				correctedUsed: z.number().min(0),
+			}),
+		)
+		.mutation(async ({ ctx, input }) => {
+			const booking = await ctx.db.equipmentBooking.findUnique({
+				where: { id: input.equipmentBookingId },
+				include: {
+					session: { select: { id: true, createdById: true } },
+				},
+			});
+
+			if (!booking) {
+				throw new TRPCError({
+					code: "NOT_FOUND",
+					message: "Equipment booking not found",
+				});
+			}
+
+			await ensureManagedSessionAccess({
+				database: ctx.db,
+				sessionId: booking.session.id,
+				userId: ctx.auth.userId,
+				role: ctx.userRole,
+			});
+
+			if (input.correctedUsed > booking.amount) {
+				throw new TRPCError({
+					code: "BAD_REQUEST",
+					message: "Corrected usage cannot exceed the amount originally booked.",
+				});
+			}
+
+			const updated = await ctx.db.equipmentBooking.update({
+				where: { id: input.equipmentBookingId },
+				data: {
+					correctedUsed: input.correctedUsed,
+					correctedBy: ctx.auth.userId,
+					correctedAt: new Date(),
+				},
+			});
+
+			// Send in-app notification to student
+			try {
+				await ctx.db.notification.create({
+					data: {
+						userId: booking.userId,
+						type: "USAGE_CORRECTED",
+						title: "Equipment Usage Corrected",
+						message: `A teacher has corrected your equipment usage report.`,
+						link: "/dashboard",
+					},
+				});
+			} catch {
+				// notification failure is non-fatal
+			}
+
+			return updated;
+		}),
+
+	// Get session equipment usage summary (for teacher review)
+	getSessionUsageSummary: teacherProcedure
+		.input(z.object({ sessionId: z.string() }))
+		.query(async ({ ctx, input }) => {
+			await ensureManagedSessionAccess({
+				database: ctx.db,
+				sessionId: input.sessionId,
+				userId: ctx.auth.userId,
+				role: ctx.userRole,
+			});
+
+			return await ctx.db.equipmentBooking.findMany({
+				where: { sessionId: input.sessionId },
+				include: {
+					user: { select: { firstName: true, lastName: true, email: true } },
+					equipment: { select: { name: true, unitType: true } },
+				},
+				orderBy: [
+					{ user: { lastName: "asc" } },
+					{ equipment: { name: "asc" } },
+				],
+			});
+		}),
 });

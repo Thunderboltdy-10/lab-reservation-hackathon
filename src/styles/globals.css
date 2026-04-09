@@ -224,101 +224,131 @@
 
 /* Custom scrollbar */
 @layer utilities {
-	.scrollbar-thin {
+	.scrollbar-thin,
+	.custom-scrollbar {
 		scrollbar-width: thin;
-		scrollbar-color: var(--muted) transparent;
+		scrollbar-color: var(--border) transparent;
 	}
 
-	.scrollbar-thin::-webkit-scrollbar {
-		width: 6px;
-		height: 6px;
+	.scrollbar-thin::-webkit-scrollbar,
+	.custom-scrollbar::-webkit-scrollbar {
+		width: 4px;
+		height: 4px;
 	}
 
-	.scrollbar-thin::-webkit-scrollbar-track {
+	.scrollbar-thin::-webkit-scrollbar-track,
+	.custom-scrollbar::-webkit-scrollbar-track {
 		background: transparent;
 	}
 
-	.scrollbar-thin::-webkit-scrollbar-thumb {
+	.scrollbar-thin::-webkit-scrollbar-thumb,
+	.custom-scrollbar::-webkit-scrollbar-thumb {
+		background-color: var(--border);
+		border-radius: 9999px;
+	}
+
+	.scrollbar-thin::-webkit-scrollbar-thumb:hover,
+	.custom-scrollbar::-webkit-scrollbar-thumb:hover {
 		background-color: var(--muted-foreground);
-		border-radius: 3px;
-	}
-
-	.scrollbar-thin::-webkit-scrollbar-thumb:hover {
-		background-color: var(--foreground);
 	}
 }
 
-/* Animated border effects */
-.hover-blue:hover::before,
-.hover-green:hover::before,
-.outline-blue::before {
-	content: "";
-	position: absolute;
-	inset: 0;
-	border-radius: inherit;
-	padding: 3px;
-	background: linear-gradient(
-		90deg,
-		rgba(255, 255, 255, 0.8),
-		#003087,
-		rgba(255, 255, 255, 0.8)
-	);
-	background-size: 200% 200%;
-	animation: moveBorder 5s linear infinite;
-	mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-	-webkit-mask-composite: xor;
-	mask-composite: exclude;
-	pointer-events: none;
+/* ─── Animated panel-state effects ───────────────────────────────────────── */
+
+/* Booking mode (blue in light, lime in dark) — slow, steady beacon pulse */
+.outline-blue {
+	animation: bookingPulse 2.8s ease-in-out infinite;
+}
+.dark .outline-blue {
+	animation: bookingPulseDark 2.8s ease-in-out infinite;
 }
 
-.hover-green:hover::before {
-	background: linear-gradient(
-		90deg,
-		rgba(255, 255, 255, 0.8),
-		#b3dc3c,
-		rgba(255, 255, 255, 0.8)
-	);
+/* Equipment edit mode (green in light, lime in dark) — quicker, sharper pulse */
+.outline-green {
+	animation: equipmentPulse 1.9s ease-in-out infinite;
+}
+.dark .outline-green {
+	animation: equipmentPulseDark 1.9s ease-in-out infinite;
 }
 
-.outline-blue::before {
-	background: linear-gradient(
-		90deg,
-		rgba(255, 255, 255, 0.8),
-		#003087,
-		rgba(255, 255, 255, 0.8)
-	);
-	padding: 2px;
-}
-
-.dark .hover-blue:hover::before,
-.dark .outline-blue::before {
-	background: linear-gradient(
-		90deg,
-		rgba(10, 22, 40, 0.8),
-		#b3dc3c,
-		rgba(10, 22, 40, 0.8)
-	);
-}
-
-.dark .hover-green:hover::before {
-	background: linear-gradient(
-		90deg,
-		rgba(10, 22, 40, 0.8),
-		#b3dc3c,
-		rgba(10, 22, 40, 0.8)
-	);
-}
-
-@keyframes moveBorder {
-	0% {
-		background-position: 0% 0%;
+@keyframes bookingPulse {
+	0%, 100% {
+		box-shadow:
+			0 0 0 2px rgba(0, 48, 135, 0.45),
+			0 0 24px rgba(0, 48, 135, 0.10),
+			0 8px 40px rgba(0, 48, 135, 0.08);
 	}
 	50% {
-		background-position: 100% 100%;
+		box-shadow:
+			0 0 0 3px rgba(0, 48, 135, 0.85),
+			0 0 44px rgba(0, 48, 135, 0.22),
+			0 8px 60px rgba(0, 48, 135, 0.18);
 	}
-	100% {
-		background-position: 0% 0%;
+}
+
+@keyframes bookingPulseDark {
+	0%, 100% {
+		box-shadow:
+			0 0 0 2px rgba(179, 220, 60, 0.45),
+			0 0 24px rgba(179, 220, 60, 0.10),
+			0 8px 40px rgba(179, 220, 60, 0.08);
 	}
+	50% {
+		box-shadow:
+			0 0 0 3px rgba(179, 220, 60, 0.85),
+			0 0 44px rgba(179, 220, 60, 0.22),
+			0 8px 60px rgba(179, 220, 60, 0.18);
+	}
+}
+
+@keyframes equipmentPulse {
+	0%, 100% {
+		box-shadow:
+			0 0 0 2px rgba(90, 160, 0, 0.40),
+			0 0 16px rgba(90, 160, 0, 0.08),
+			inset 0 0 12px rgba(90, 160, 0, 0.04);
+	}
+	55% {
+		box-shadow:
+			0 0 0 2.5px rgba(90, 160, 0, 0.90),
+			0 0 32px rgba(90, 160, 0, 0.24),
+			inset 0 0 18px rgba(90, 160, 0, 0.08);
+	}
+}
+
+@keyframes equipmentPulseDark {
+	0%, 100% {
+		box-shadow:
+			0 0 0 2px rgba(179, 220, 60, 0.40),
+			0 0 16px rgba(179, 220, 60, 0.08),
+			inset 0 0 12px rgba(179, 220, 60, 0.04);
+	}
+	55% {
+		box-shadow:
+			0 0 0 2.5px rgba(179, 220, 60, 0.90),
+			0 0 36px rgba(179, 220, 60, 0.28),
+			inset 0 0 18px rgba(179, 220, 60, 0.08);
+	}
+}
+
+/* Hover-only variants for interactive cards */
+.hover-blue {
+	transition: box-shadow 0.2s ease, border-color 0.2s ease;
+}
+.hover-blue:hover {
+	box-shadow: 0 0 0 2px rgba(0, 48, 135, 0.55), 0 0 20px rgba(0, 48, 135, 0.12);
+}
+.dark .hover-blue:hover {
+	box-shadow: 0 0 0 2px rgba(179, 220, 60, 0.55), 0 0 20px rgba(179, 220, 60, 0.14);
+}
+.hover-green {
+	transition: box-shadow 0.2s ease, border-color 0.2s ease;
+}
+.hover-green:hover {
+	box-shadow: 0 0 0 2px rgba(90, 160, 0, 0.55), 0 0 20px rgba(90, 160, 0, 0.12);
+}
+.dark .hover-green:hover {
+	box-shadow: 0 0 0 2px rgba(179, 220, 60, 0.55), 0 0 20px rgba(179, 220, 60, 0.14);
 }
 
 /* Entrance animations */
