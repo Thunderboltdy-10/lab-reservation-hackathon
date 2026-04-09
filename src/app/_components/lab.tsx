@@ -30,6 +30,7 @@ import useLab from "@/hooks/use-lab";
 import { equipmentAtom, isBookingAtom } from "@/lib/atoms";
 import { api } from "@/trpc/react";
 import { useAuth } from "@clerk/nextjs";
+import { type EquipmentUnit } from "@prisma/client";
 import { useAtom } from "jotai";
 import {
 	Check,
@@ -39,6 +40,7 @@ import {
 	Settings,
 	Trash2,
 	X,
+    Search,
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import type React from "react";
@@ -63,10 +65,10 @@ const Lab = ({
 	const [booking, setBooking] = useAtom(isBookingAtom);
 	const [equipment, setEquipment] = useAtom(equipmentAtom);
 	const [displayedLabEquipment, setDisplayedLabEquipment] = useState<
-		{ id: string; name: string; total: number; unitType: "UNIT" | "ML" }[]
+		{ id: string; name: string; total: number; unitType: EquipmentUnit }[]
 	>([]);
 	const [editedLabEquipment, setEditedLabEquipment] = useState<
-		{ id: string; name: string; total: number; unitType: "UNIT" | "ML" }[]
+		{ id: string; name: string; total: number; unitType: EquipmentUnit }[]
 	>([]);
 	const [sessionEquipmentDraft, setSessionEquipmentDraft] = useState<
 		{
@@ -74,7 +76,7 @@ const Lab = ({
 			id: string;
 			total: number;
 			available: number;
-			unitType: "UNIT" | "ML";
+			unitType: EquipmentUnit;
 		}[]
 	>([]);
 	const [bookingEquipmentDraft, setBookingEquipmentDraft] = useState<
@@ -83,14 +85,21 @@ const Lab = ({
 			id: string;
 			total: number;
 			available: number;
-			unitType: "UNIT" | "ML";
+			unitType: EquipmentUnit;
 		}[]
 	>([]);
+
+	const [labEquipmentSearch, setLabEquipmentSearch] = useState("");
+	const [labEqVisibleCount, setLabEqVisibleCount] = useState(15);
+	const [sessionEqSearch, setSessionEqSearch] = useState("");
+	const [sessionEqVisibleCount, setSessionEqVisibleCount] = useState(15);
+	const [bookingEqSearch, setBookingEqSearch] = useState("");
+	const [bookingEqVisibleCount, setBookingEqVisibleCount] = useState(15);
 
 	const [templateVisible, setTemplateVisible] = useState(false);
 	const [templateName, setTemplateName] = useState("");
 	const [templateTotal, setTemplateTotal] = useState(1);
-	const [templateUnitType, setTemplateUnitType] = useState<"UNIT" | "ML">(
+	const [templateUnitType, setTemplateUnitType] = useState<EquipmentUnit>(
 		"UNIT",
 	);
 
@@ -147,8 +156,17 @@ const Lab = ({
 	);
 	const seatIds = seats ?? [];
 
-	const unitLabel = (unitType: "UNIT" | "ML") =>
-		unitType === "ML" ? "mL" : "qty";
+	const unitLabel = (unitType: EquipmentUnit) => {
+		switch (unitType) {
+			case "ML": return "mL";
+			case "G": return "g";
+			case "MG": return "mg";
+			case "L": return "L";
+			case "BOX": return "boxes";
+			case "TABLETS": return "tabs";
+			default: return "qty";
+		}
+	};
 
 	const effectiveConfig = useMemo<LabConfig>(() => {
 		if (hasConfig) return config;
@@ -687,20 +705,16 @@ const Lab = ({
 	const equipmentPanelClass = isEquipmentFocus ? "w-full lg:basis-[44%]" : "w-full lg:basis-[40%]";
 
 	return (
-		<div className="flex min-h-screen flex-col bg-background/50 pb-12">
-			<div className="flex-none px-4 pt-8 md:px-8 md:pt-12 pb-8">
-				<div className="mb-10 text-center">
-					<div className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-4 py-1.5 mb-4">
-						<span className="text-sm font-medium text-primary">Lab Environment</span>
-					</div>
-					<h1 className="flex items-center justify-center font-bold text-4xl md:text-5xl tracking-tight text-foreground">
-						{isPhysics ? "Physics & Chemistry Facility" : "Biology & Life Sciences"}
-					</h1>
-					<p className="mt-4 text-muted-foreground max-w-xl mx-auto">
-						Manage seat reservations and equipment requests for upcoming sessions.
-					</p>
-				</div>
-				<div className="mx-auto flex flex-col lg:flex-row w-full max-w-[1600px] items-stretch gap-8 transition-all duration-500 ease-spring">
+		<div className="container mx-auto w-full max-w-[1600px] p-6 pb-12">
+			<div className="mb-8">
+				<h1 className="font-semibold text-3xl">
+					{isPhysics ? "Physics & Chemistry Facility" : "Biology & Life Sciences"}
+				</h1>
+				<p className="mt-1 text-muted-foreground">
+					Manage seat reservations and equipment requests for upcoming sessions.
+				</p>
+			</div>
+			<div className="mx-auto flex flex-col lg:flex-row w-full items-stretch gap-8 transition-all duration-500 ease-spring">
 					<div
 						className={`relative flex ${labPanelClass} flex-col items-center justify-center rounded-[2rem] border bg-gradient-to-br from-card/80 via-card/50 to-muted/30 p-8 shadow-sm transition-[flex-basis] duration-500 ease-in-out ${activeSessionId !== null ? "border-transparent outline-blue shadow-lg" : "border-border/50"}`}
 					>
@@ -873,105 +887,117 @@ const Lab = ({
 					</div>
 					{showEquipmentPanel && (
 						<div
-							className={`flex ${equipmentPanelClass} relative flex-col gap-6 rounded-[2rem] border border-border/50 bg-card/60 p-6 md:p-8 shadow-sm transition-[flex-basis] duration-500 ease-in-out ${booking !== null || equipment !== null ? "outline-blue shadow-lg" : ""} max-h-[60vh] lg:max-h-none`}
+							className={`flex ${equipmentPanelClass} relative flex-col gap-4 rounded-[2rem] border border-border/50 bg-card/60 p-5 md:p-6 shadow-sm transition-[flex-basis] duration-500 ease-in-out ${booking !== null || equipment !== null ? "outline-blue shadow-lg" : ""} h-[500px] max-h-[70vh] lg:max-h-[600px]`}
 						>
 							<div
 								className={`flex items-center ${booking === null && equipment === null ? "justify-between" : "justify-center"}`}
 							>
 								<div
-									className={`pl-2 font-semibold text-foreground text-xl ${booking === null && equipment === null ? "" : "pt-2"}`}
+									className={`pl-2 font-semibold text-foreground text-lg ${booking === null && equipment === null ? "" : "pt-1"}`}
 								>
 									{booking
 										? "Session Equipment"
 										: equipment
 											? "Edit Session Equipment"
-											: "Lab Equipment"}
+											: "Lab Inventory"}
 								</div>
 								{booking === null && equipment === null && isTeacher && (
 									<Button
 										variant={theme === "dark" ? "default" : "secondary"}
 										onClick={() => setTemplateVisible(true)}
+					size="sm"
+					className="rounded-xl shadow-sm h-8"
 									>
-										+ Add Equipment
+										+ Add
 									</Button>
 								)}
 							</div>
-							<div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto pr-1">
+							<div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pr-1 custom-scrollbar" onScroll={(e) => {
+					const target = e.target as HTMLDivElement;
+					if (target.scrollTop + target.clientHeight >= target.scrollHeight - 50) {
+					if (!booking && !equipment) setLabEqVisibleCount(p => p + 15);
+					else if (equipment !== null && !booking) setSessionEqVisibleCount(p => p + 15);
+					else if (booking !== null) setBookingEqVisibleCount(p => p + 15);
+					}
+					}}>
+								{isTeacher && !booking && !equipment && labEquipment && labEquipment.length > 0 && (
+									<div className="relative w-full mb-1">
+										<Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+										<Input 
+											placeholder="Search..." 
+											className="w-full pl-8 h-8 text-xs rounded-lg bg-background/40"
+											value={labEquipmentSearch}
+											onChange={(e) => setLabEquipmentSearch(e.target.value)}
+										/>
+									</div>
+								)}
 								{templateVisible && !booking && !equipment && (
-									<div className="w-full rounded-lg border border-border/60 bg-muted/30 p-2 text-foreground">
-										<div className="flex flex-wrap items-center gap-2 text-sm">
+									<div className="w-full rounded-xl border border-border/60 bg-muted/40 p-3 text-foreground shadow-sm">
+										<div className="flex flex-col gap-3">
 											<Input
 												type="text"
-												className="!bg-transparent h-8 w-fit max-w-[160px] border-none text-sm focus-visible:ring-0 focus-visible:ring-offset-0"
-												placeholder="Equipment Name"
+												className="bg-background/50 h-8 border-none text-xs focus-visible:ring-1 rounded-lg"
+												placeholder="Item Name"
 												autoFocus
 												value={templateName}
 												onChange={(e) => setTemplateName(e.target.value)}
 											/>
-											<Select
-												value={templateUnitType}
-												onValueChange={(value) =>
-													setTemplateUnitType(value as "UNIT" | "ML")
-												}
-											>
-												<SelectTrigger className="h-8 w-24 text-xs">
-													<SelectValue placeholder="Unit" />
-												</SelectTrigger>
-												<SelectContent>
-													<SelectItem value="UNIT">Qty</SelectItem>
-													<SelectItem value="ML">mL</SelectItem>
-												</SelectContent>
-											</Select>
-											<div className="flex h-8 items-center gap-2 rounded-md border border-border/60 px-2 py-1">
-												<button
-													type="button"
-													className={`px-1 text-xs ${templateTotal === 1 ? "opacity-50" : ""}`}
-													onClick={() =>
-														setTemplateTotal((q) => (q > 1 ? q - 1 : 1))
-													}
-												>
-													-
-												</button>
-												<Input
-													type="text"
-													className="!bg-transparent h-7 w-10 border-none text-center text-xs focus-visible:ring-0 focus-visible:ring-offset-0"
-													placeholder="Qty"
-													value={templateTotal}
-													onChange={(e) =>
-														setTemplateTotal(
-															Number.parseInt(e.target.value) > 1
-																? Number.parseInt(e.target.value)
-																: 1,
-														)
-													}
-												/>
-												<button
-													type="button"
-													className="px-1 text-xs"
-													onClick={() => setTemplateTotal((q) => q + 1)}
-												>
-													+
-												</button>
-											</div>
-											<Button
-												className="ml-auto h-8"
-												variant={theme === "dark" ? "default" : "secondary"}
-												onClick={() => addLabEquipment()}
-											>
-												Add
-											</Button>
-											<Button
-												size="icon"
-												variant="ghost"
-												onClick={() => {
-													setTemplateVisible(false);
-													setTemplateName("");
-													setTemplateTotal(1);
-													setTemplateUnitType("UNIT");
-												}}
-											>
-												<X className="h-4 w-4" />
-											</Button>
+					<div className="flex items-center gap-2">
+					<Select
+					value={templateUnitType}
+					onValueChange={(value) =>
+					setTemplateUnitType(value as EquipmentUnit)
+					}
+					>
+					<SelectTrigger className="h-8 flex-1 text-[10px] rounded-lg bg-background/50 border-none">
+					<SelectValue placeholder="Unit" />
+					</SelectTrigger>
+					<SelectContent className="rounded-xl">
+					<SelectItem value="UNIT">Qty</SelectItem>
+					<SelectItem value="ML">mL</SelectItem>
+					<SelectItem value="G">g</SelectItem>
+					<SelectItem value="MG">mg</SelectItem>
+					<SelectItem value="L">L</SelectItem>
+					<SelectItem value="BOX">boxes</SelectItem>
+					<SelectItem value="TABLETS">tabs</SelectItem>
+					</SelectContent>
+					</Select>
+					<Input
+					type="number"
+					className="bg-background/50 h-8 w-16 border-none text-center text-xs focus-visible:ring-1 rounded-lg"
+					placeholder="Qty"
+					value={templateTotal}
+					onChange={(e) =>
+					setTemplateTotal(
+					Number.parseInt(e.target.value) > 1
+					? Number.parseInt(e.target.value)
+					: 1,
+					)
+					}
+					/>
+					</div>
+											<div className="flex gap-2">
+					<Button
+					className="flex-1 h-8 text-xs rounded-lg"
+					variant={theme === "dark" ? "default" : "secondary"}
+					onClick={() => addLabEquipment()}
+					>
+					Add Item
+					</Button>
+					<Button
+					size="icon"
+					variant="ghost"
+					className="h-8 w-8 rounded-lg"
+					onClick={() => {
+					setTemplateVisible(false);
+					setTemplateName("");
+					setTemplateTotal(1);
+					setTemplateUnitType("UNIT");
+					}}
+					>
+					<X className="h-3.5 w-3.5" />
+					</Button>
+					</div>
 										</div>
 									</div>
 								)}
@@ -980,263 +1006,186 @@ const Lab = ({
 									!booking &&
 									!equipment &&
 									(labEquipment ? (
-										labEquipment.map((item, index) => (
+										labEquipment
+					.filter(item => item.name.toLowerCase().includes(labEquipmentSearch.toLowerCase()))
+					.slice(0, labEqVisibleCount)
+					.map((item) => {
+					const index = displayedLabEquipment.findIndex(e => e.id === item.id);
+					if (index === -1) return null;
+					const isChanged = displayedLabEquipment[index]?.total !== item.total || 
+					displayedLabEquipment[index]?.name !== item.name || 
+					displayedLabEquipment[index]?.unitType !== item.unitType;
+
+					return (
 											<div
-												className="w-full rounded-lg border border-border/60 bg-muted/30 p-2 text-foreground"
+												className={`w-full rounded-xl border transition-all duration-300 ${isChanged ? "border-blue/40 bg-blue/5" : "border-border/40 bg-muted/10 hover:bg-muted/20"} p-2 px-3 text-foreground group`}
 												key={item.id}
 											>
-												<div className="flex flex-wrap items-center gap-2 text-sm">
-													<Input
-														type="text"
-														id={item.id}
-														className="!bg-transparent h-8 w-fit max-w-[160px] border-none text-sm focus-visible:ring-0 focus-visible:ring-offset-0"
-														placeholder="Equipment Name"
-														value={displayedLabEquipment[index]?.name ?? ""}
-														onChange={(e) => {
-															const newName = e.target.value;
-															setDisplayedLabEquipment((prev) =>
-																prev.map((eq) =>
-																	eq.id === item.id
-																		? { ...eq, name: newName }
-																		: eq,
-																),
-															);
-															setEditedLabEquipment((prev) => {
-																const existing = prev.find(
-																	(eq) => eq.id === item.id,
-																);
-																if (existing)
-																	return prev.map((eq) =>
-																		eq.id === item.id
-																			? { ...eq, name: newName }
-																			: eq,
-																	);
-																return [
-																	...prev,
-																	{
-																		id: item.id,
-																		name: newName,
-																		total: item.total,
-																		unitType: item.unitType,
-																	},
-																];
-															});
-														}}
-													/>
-													<Select
-														value={
-															displayedLabEquipment[index]?.unitType ??
-															item.unitType
-														}
-														onValueChange={(value) => {
-															const newUnit = value as "UNIT" | "ML";
-															setDisplayedLabEquipment((prev) =>
-																prev.map((eq) =>
-																	eq.id === item.id
-																		? { ...eq, unitType: newUnit }
-																		: eq,
-																),
-															);
-															setEditedLabEquipment((prev) => {
-																const existing = prev.find(
-																	(eq) => eq.id === item.id,
-																);
-																if (existing)
-																	return prev.map((eq) =>
-																		eq.id === item.id
-																			? { ...eq, unitType: newUnit }
-																			: eq,
-																	);
-																return [
-																	...prev,
-																	{
-																		id: item.id,
-																		name: item.name,
-																		total: item.total,
-																		unitType: newUnit,
-																	},
-																];
-															});
-														}}
-													>
-														<SelectTrigger className="h-8 w-24 text-xs">
-															<SelectValue placeholder="Unit" />
-														</SelectTrigger>
-														<SelectContent>
-															<SelectItem value="UNIT">Qty</SelectItem>
-															<SelectItem value="ML">mL</SelectItem>
-														</SelectContent>
-													</Select>
-													<div className="flex h-8 items-center gap-2 rounded-md border border-border/60 px-2 py-1">
-														<button
-															type="button"
-															className={`px-1 text-xs ${displayedLabEquipment[index]?.total === 1 ? "opacity-50" : ""}`}
-															onClick={() => {
-																if (!displayedLabEquipment[index]) return;
-																const newTotal = Math.max(
-																	1,
-																	displayedLabEquipment[index].total - 1,
-																);
-																setDisplayedLabEquipment((prev) =>
-																	prev.map((eq) =>
-																		eq.id === item.id
-																			? { ...eq, total: newTotal }
-																			: eq,
-																	),
-																);
-																setEditedLabEquipment((prev) => {
-																	const existing = prev.find(
-																		(eq) => eq.id === item.id,
-																	);
-																	if (existing)
-																		return prev.map((eq) =>
-																			eq.id === item.id
-																				? { ...eq, total: newTotal }
-																				: eq,
-																		);
-																	return [
-																		...prev,
-																		{
-																			id: item.id,
-																			name: item.name,
-																			total: newTotal,
-																			unitType:
-																				displayedLabEquipment[index]
-																					?.unitType ?? item.unitType,
-																		},
-																	];
-																});
-															}}
-														>
-															-
-														</button>
-														<Input
-															type="text"
-															className="!bg-transparent h-7 w-10 border-none text-center text-xs focus-visible:ring-0 focus-visible:ring-offset-0"
-															placeholder="Qty"
-															value={displayedLabEquipment[index]?.total ?? ""}
-															onChange={(e) => {
-																let newTotal = Number.parseInt(e.target.value);
-																if (e.target.value === "") newTotal = 1;
-																if (newTotal < 1) return;
-																setDisplayedLabEquipment((prev) =>
-																	prev.map((eq) =>
-																		eq.id === item.id
-																			? { ...eq, total: newTotal }
-																			: eq,
-																	),
-																);
-																setEditedLabEquipment((prev) => {
-																	const existing = prev.find(
-																		(eq) => eq.id === item.id,
-																	);
-																	if (existing)
-																		return prev.map((eq) =>
-																			eq.id === item.id
-																				? { ...eq, total: newTotal }
-																				: eq,
-																		);
-																	return [
-																		...prev,
-																		{
-																			id: item.id,
-																			name: item.name,
-																			total: newTotal,
-																			unitType:
-																				displayedLabEquipment[index]
-																					?.unitType ?? item.unitType,
-																		},
-																	];
-																});
-															}}
-														/>
-														<button
-															type="button"
-															className="px-1 text-xs"
-															onClick={() => {
-																if (!displayedLabEquipment[index]) return;
-																const newTotal =
-																	displayedLabEquipment[index].total + 1;
-																setDisplayedLabEquipment((prev) =>
-																	prev.map((eq) =>
-																		eq.id === item.id
-																			? { ...eq, total: newTotal }
-																			: eq,
-																	),
-																);
-																setEditedLabEquipment((prev) => {
-																	const existing = prev.find(
-																		(eq) => eq.id === item.id,
-																	);
-																	if (existing)
-																		return prev.map((eq) =>
-																			eq.id === item.id
-																				? { ...eq, total: newTotal }
-																				: eq,
-																		);
-																	return [
-																		...prev,
-																		{
-																			id: item.id,
-																			name: item.name,
-																			total: newTotal,
-																			unitType:
-																				displayedLabEquipment[index]
-																					?.unitType ?? item.unitType,
-																		},
-																	];
-																});
-															}}
-														>
-															+
-														</button>
-													</div>
-													<div className="whitespace-nowrap text-muted-foreground text-xs">
-														{displayedLabEquipment[index]?.total ?? item.total}{" "}
-														{unitLabel(
-															displayedLabEquipment[index]?.unitType ??
-																item.unitType,
-														)}
-													</div>
-													<div className="ml-auto flex items-center gap-2">
-														<Button
-															size="icon"
-															variant="ghost"
-															className={`h-8 w-8 ${displayedLabEquipment[index]?.total === item.total && displayedLabEquipment[index]?.name === item.name && displayedLabEquipment[index]?.unitType === item.unitType ? "hidden" : ""}`}
-															onClick={() => {
-																updateLabEquipment(item.id);
-															}}
-														>
-															<Check className="h-4 w-4" />
-														</Button>
-														<Button
-															size="icon"
-															variant="ghost"
-															className={`h-8 w-8 ${displayedLabEquipment[index]?.total === item.total && displayedLabEquipment[index]?.name === item.name && displayedLabEquipment[index]?.unitType === item.unitType ? "" : "hidden"}`}
-															onClick={() =>
-																document.getElementById(item.id)?.focus()
-															}
-														>
-															<PencilIcon className="h-4 w-4" />
-														</Button>
-														<Button
-															size="icon"
-															variant="ghost"
-															className="h-8 w-8"
-															onClick={() => deleteLabEquipment(item.id)}
-														>
-															<Trash2 className="h-4 w-4 text-destructive" />
-														</Button>
-													</div>
+												<div className="flex items-center gap-2">
+					<div className="relative flex-1 min-w-0">
+					<Input
+					type="text"
+					id={item.id}
+					className="!bg-transparent h-7 w-full border-none text-xs font-medium focus-visible:ring-0 p-0 overflow-hidden text-ellipsis whitespace-nowrap"
+					placeholder="Item Name"
+					value={displayedLabEquipment[index]?.name ?? ""}
+					onChange={(e) => {
+					const newName = e.target.value;
+					setDisplayedLabEquipment((prev) =>
+					prev.map((eq) =>
+					eq.id === item.id
+					? { ...eq, name: newName }
+					: eq,
+					),
+					);
+					setEditedLabEquipment((prev) => {
+					const existing = prev.find(
+					(eq) => eq.id === item.id,
+					);
+					if (existing)
+					return prev.map((eq) =>
+					eq.id === item.id
+					? { ...eq, name: newName }
+					: eq,
+					);
+					return [
+					...prev,
+					{
+					id: item.id,
+					name: newName,
+					total: item.total,
+					unitType: item.unitType,
+					},
+					];
+					});
+					}}
+					/>
+					{isChanged && (
+					<div className="absolute -left-1.5 top-1/2 -translate-y-1/2 w-1 h-1 rounded-full bg-blue" title="Unsaved changes" />
+					)}
+					</div>
+
+					<div className="flex items-center gap-1.5 shrink-0">
+					<Input
+					type="number"
+					className="!bg-background/30 h-6 w-11 border-none text-center text-[10px] focus-visible:ring-1 rounded-md"
+					value={displayedLabEquipment[index]?.total ?? ""}
+					onChange={(e) => {
+					let newTotal = Number.parseInt(e.target.value);
+					if (e.target.value === "") newTotal = 0;
+					if (Number.isNaN(newTotal)) newTotal = 0;
+					setDisplayedLabEquipment((prev) =>
+					prev.map((eq) =>
+					eq.id === item.id
+					? { ...eq, total: newTotal }
+					: eq,
+					),
+					);
+					setEditedLabEquipment((prev) => {
+					const existing = prev.find(
+					(eq) => eq.id === item.id,
+					);
+					if (existing)
+					return prev.map((eq) =>
+					eq.id === item.id
+					? { ...eq, total: newTotal }
+					: eq,
+					);
+					return [
+					...prev,
+					{
+					id: item.id,
+					name: item.name,
+					total: newTotal,
+					unitType:
+					displayedLabEquipment[index]
+					?.unitType ?? item.unitType,
+					},
+					];
+					});
+					}}
+					/>
+					<Select
+					value={
+					displayedLabEquipment[index]?.unitType ??
+					item.unitType
+					}
+					onValueChange={(value) => {
+					const newUnit = value as EquipmentUnit;
+					setDisplayedLabEquipment((prev) =>
+					prev.map((eq) =>
+					eq.id === item.id
+					? { ...eq, unitType: newUnit }
+					: eq,
+					),
+					);
+					setEditedLabEquipment((prev) => {
+					const existing = prev.find(
+					(eq) => eq.id === item.id,
+					);
+					if (existing)
+					return prev.map((eq) =>
+					eq.id === item.id
+					? { ...eq, unitType: newUnit }
+					: eq,
+					);
+					return [
+					...prev,
+					{
+					id: item.id,
+					name: item.name,
+					total: item.total,
+					unitType: newUnit,
+					},
+					];
+					});
+					}}
+					>
+					<SelectTrigger className="h-6 w-14 text-[9px] uppercase font-bold border-none bg-background/30 rounded-md px-1.5">
+					<SelectValue placeholder="Unit" />
+					</SelectTrigger>
+					<SelectContent className="rounded-xl">
+					<SelectItem value="UNIT">Qty</SelectItem>
+					<SelectItem value="ML">mL</SelectItem>
+					<SelectItem value="G">g</SelectItem>
+					<SelectItem value="MG">mg</SelectItem>
+					<SelectItem value="L">L</SelectItem>
+					<SelectItem value="BOX">boxes</SelectItem>
+					<SelectItem value="TABLETS">tabs</SelectItem>
+					</SelectContent>
+					</Select>
+
+					{isChanged ? (
+					<Button
+					size="icon"
+					variant="default"
+					className="h-6 w-6 rounded-md bg-blue hover:bg-blue/90 text-white animate-in fade-in zoom-in-95"
+					onClick={() => updateLabEquipment(item.id)}
+					title="Save Changes"
+					>
+					<Check className="h-3 w-3" />
+					</Button>
+					) : (
+					<Button
+					size="icon"
+					variant="ghost"
+					className="h-6 w-6 rounded-md text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
+					onClick={() => deleteLabEquipment(item.id)}
+					title="Delete"
+					>
+					<Trash2 className="h-3 w-3" />
+					</Button>
+					)}
+					</div>
 												</div>
 											</div>
-										))
+					);
+										})
 									) : (
-										<div className="text-center text-muted-foreground">
-											No equipment added
+										<div className="text-center py-4 text-muted-foreground text-xs italic">
+											No items found
 										</div>
 									))}
-
 								{equipment !== null && isTeacher && (
 									<div className="space-y-4">
 										<div className="rounded-xl border border-border/60 bg-muted/30 p-4">
@@ -1421,15 +1370,32 @@ const Lab = ({
 													Add All
 												</Button>
 											</div>
+                                            {labEquipment && labEquipment.length > 0 && (
+                                                <div className="relative w-full mb-3">
+                                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                                                    <Input 
+                                                        placeholder="Search equipment..." 
+                                                        className="w-full pl-8 h-8 text-xs"
+                                                        value={sessionEqSearch}
+                                                        onChange={(e) => setSessionEqSearch(e.target.value)}
+                                                    />
+                                                </div>
+                                            )}
 											{labEquipment && labEquipment.length > 0 ? (
-												<div className="max-h-56 space-y-2 overflow-y-auto pr-2">
+												<div className="max-h-56 space-y-2 overflow-y-auto pr-2 custom-scrollbar" onScroll={(e) => {
+                                                    const target = e.target as HTMLDivElement;
+                                                    if (target.scrollTop + target.clientHeight >= target.scrollHeight - 20) {
+                                                        setSessionEqVisibleCount(p => p + 15);
+                                                    }
+                                                }}>
 													{labEquipment
 														.filter(
 															(item) =>
 																!sessionEquipmentDraft.some(
 																	(eq) => eq.id === item.id,
-																),
+																) && item.name.toLowerCase().includes(sessionEqSearch.toLowerCase()),
 														)
+                                                        .slice(0, sessionEqVisibleCount)
 														.map((item) => (
 															<div
 																key={item.id}
@@ -1723,9 +1689,26 @@ const Lab = ({
 															<div className="mb-2 font-medium text-muted-foreground text-xs uppercase tracking-wider">
 																Add Equipment
 															</div>
-															<div className="max-h-40 space-y-2 overflow-y-auto pr-2">
+                                                            {displayedSessionEquipment && displayedSessionEquipment.length > 0 && (
+                                                                <div className="relative w-full mb-3">
+                                                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                                                                    <Input 
+                                                                        placeholder="Search equipment..." 
+                                                                        className="w-full pl-8 h-8 text-xs bg-background/50"
+                                                                        value={bookingEqSearch}
+                                                                        onChange={(e) => setBookingEqSearch(e.target.value)}
+                                                                    />
+                                                                </div>
+                                                            )}
+															<div className="max-h-40 space-y-2 overflow-y-auto pr-2 custom-scrollbar" onScroll={(e) => {
+                                                                const target = e.target as HTMLDivElement;
+                                                                if (target.scrollTop + target.clientHeight >= target.scrollHeight - 20) {
+                                                                    setBookingEqVisibleCount(p => p + 15);
+                                                                }
+                                                            }}>
 																{displayedSessionEquipment
-																	.filter((item) => item.available > 0)
+																	.filter((item) => item.available > 0 && item.name.toLowerCase().includes(bookingEqSearch.toLowerCase()))
+                                                                    .slice(0, bookingEqVisibleCount)
 																	.map((item) => (
 																		<div
 																			key={item.id}
@@ -1983,12 +1966,29 @@ const Lab = ({
 													<div className="mb-2 font-medium text-muted-foreground text-xs uppercase tracking-wider">
 														Available Equipment
 													</div>
+                                                    {displayedSessionEquipment && displayedSessionEquipment.some((item) => item.available > 0) && (
+                                                        <div className="relative w-full mb-3">
+                                                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                                                            <Input 
+                                                                placeholder="Search equipment..." 
+                                                                className="w-full pl-8 h-8 text-xs bg-background/50"
+                                                                value={bookingEqSearch}
+                                                                onChange={(e) => setBookingEqSearch(e.target.value)}
+                                                            />
+                                                        </div>
+                                                    )}
 													{displayedSessionEquipment.some(
-														(item) => item.available > 0,
+														(item) => item.available > 0 && item.name.toLowerCase().includes(bookingEqSearch.toLowerCase()),
 													) ? (
-														<div className="max-h-48 space-y-2 overflow-y-auto">
+														<div className="max-h-48 space-y-2 overflow-y-auto custom-scrollbar" onScroll={(e) => {
+                                                            const target = e.target as HTMLDivElement;
+                                                            if (target.scrollTop + target.clientHeight >= target.scrollHeight - 20) {
+                                                                setBookingEqVisibleCount(p => p + 15);
+                                                            }
+                                                        }}>
 															{displayedSessionEquipment
-																.filter((item) => item.available > 0)
+																.filter((item) => item.available > 0 && item.name.toLowerCase().includes(bookingEqSearch.toLowerCase()))
+                                                                .slice(0, bookingEqVisibleCount)
 																.map((item) => (
 																	<div
 																		className="relative flex w-full select-none items-center justify-between rounded-lg border border-border/40 bg-background/30 p-2 text-center"
@@ -2112,8 +2112,7 @@ const Lab = ({
 						</div>
 					)}
 				</div>
-			</div>
-			<div className="w-full max-w-[1600px] mx-auto px-4 md:px-8 pb-12 mt-4 lg:mt-8">
+			<div className="w-full mt-4 lg:mt-8">
 				<CalendarPicker
 					key={isPhysics ? "physics" : "biology"}
 					lab={isPhysics ? "physics" : "biology"}

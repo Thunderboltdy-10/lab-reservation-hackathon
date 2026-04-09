@@ -4,7 +4,7 @@ import {
 	sendBookingStatusEmail,
 	sendTeacherBookingRequestEmail,
 } from "@/server/services/email";
-import type { Role } from "@prisma/client";
+import type { Role, EquipmentUnit } from "@prisma/client";
 import { TRPCError } from "@trpc/server";
 import { fromZonedTime, toZonedTime } from "date-fns-tz";
 import z from "zod";
@@ -1687,7 +1687,7 @@ export const accountRouter = createTRPCRouter({
 							items: {
 								equipmentBookingId: string;
 								equipmentName: string;
-								unitType: "UNIT" | "ML";
+								unitType: EquipmentUnit;
 								amount: number;
 								actualUsed: number | null;
 								reportedAt: Date | null;
@@ -2426,7 +2426,12 @@ export const accountRouter = createTRPCRouter({
 				name: z.string(),
 				total: z.number(),
 				expirationDate: z.date().optional(),
-				unitType: z.enum(["UNIT", "ML"]),
+				unitType: z.enum(["UNIT", "ML", "G", "MG", "L", "BOX", "TABLETS"]),
+				category: z.string().optional(),
+				casNumber: z.string().optional(),
+				brand: z.string().optional(),
+				location: z.string().optional(),
+				sdsLink: z.string().optional(),
 			}),
 		)
 		.mutation(async ({ ctx, input }) => {
@@ -2437,6 +2442,11 @@ export const accountRouter = createTRPCRouter({
 					total: input.total,
 					unitType: input.unitType,
 					expirationDate: input.expirationDate,
+					category: input.category,
+					casNumber: input.casNumber,
+					brand: input.brand,
+					location: input.location,
+					sdsLink: input.sdsLink,
 					createdBy: ctx.auth.userId,
 				},
 			});
@@ -2445,14 +2455,14 @@ export const accountRouter = createTRPCRouter({
 	getLabEquipment: privateProcedure
 		.input(
 			z.object({
-				labId: z.string(),
+				labId: z.string().optional(),
 			}),
 		)
 		.query(async ({ ctx, input }) => {
 			return await ctx.db.equipment.findMany({
-				where: {
+				where: input.labId && input.labId !== "all" ? {
 					labId: input.labId,
-				},
+				} : undefined,
 				select: {
 					id: true,
 					name: true,
@@ -2460,9 +2470,15 @@ export const accountRouter = createTRPCRouter({
 					unitType: true,
 					expirationDate: true,
 					createdBy: true,
+					category: true,
+					casNumber: true,
+					brand: true,
+					location: true,
+					sdsLink: true,
+					lab: { select: { name: true } },
 				},
 				orderBy: {
-					total: "desc",
+					category: "asc",
 				},
 			});
 		}),
@@ -2527,8 +2543,13 @@ export const accountRouter = createTRPCRouter({
 				id: z.string(),
 				name: z.string().optional(),
 				total: z.number().optional(),
-				unitType: z.enum(["UNIT", "ML"]).optional(),
+				unitType: z.enum(["UNIT", "ML", "G", "MG", "L", "BOX", "TABLETS"]).optional(),
 				expirationDate: z.date().nullish(),
+				category: z.string().optional(),
+				casNumber: z.string().optional(),
+				brand: z.string().optional(),
+				location: z.string().optional(),
+				sdsLink: z.string().optional(),
 			}),
 		)
 		.mutation(async ({ ctx, input }) => {
@@ -2539,6 +2560,11 @@ export const accountRouter = createTRPCRouter({
 					total: input.total,
 					unitType: input.unitType,
 					expirationDate: input.expirationDate,
+					category: input.category,
+					casNumber: input.casNumber,
+					brand: input.brand,
+					location: input.location,
+					sdsLink: input.sdsLink,
 				},
 			});
 		}),

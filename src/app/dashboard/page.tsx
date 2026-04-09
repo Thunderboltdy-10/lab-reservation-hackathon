@@ -259,67 +259,15 @@ export default function DashboardPage() {
 
 	return (
 		<div className="container mx-auto max-w-7xl p-6">
-			<div className="relative overflow-hidden rounded-[2rem] border border-primary/20 bg-[radial-gradient(circle_at_top_left,rgba(179,220,60,0.28),transparent_35%),linear-gradient(135deg,rgba(0,48,135,0.98),rgba(6,21,54,0.96))] p-8 text-white shadow-2xl shadow-primary/10">
-				<div className="absolute inset-y-0 right-0 hidden w-1/3 bg-[linear-gradient(180deg,transparent,rgba(255,255,255,0.08),transparent)] lg:block" />
-				<div className="relative flex flex-col gap-8 lg:flex-row lg:items-end lg:justify-between">
-					<div className="max-w-3xl">
-						<Badge className="border border-white/20 bg-white/10 text-white hover:bg-white/10">
-							{isTeacher ? "Lab Operations Centre" : "Student Control Deck"}
-						</Badge>
-						<h1 className="mt-4 font-semibold text-4xl tracking-tight lg:text-5xl">
-							{isTeacher
-								? `Keep ${overview.user.firstName}'s labs running clean, on time, and accountable.`
-								: "Track every reservation, seat, and lab item from one place."}
-						</h1>
-						<p className="mt-4 max-w-2xl text-base text-white/75 lg:text-lg">
-							{isTeacher
-								? "Pending approvals, attendance backlog, expiring inventory, and usage reconciliation are surfaced before they become operational problems."
-								: "Bookings, approvals, attendance, and equipment usage are all visible here so nothing gets missed after a session ends."}
-						</p>
-					</div>
-
-					<div className="grid min-w-full gap-3 sm:grid-cols-2 lg:min-w-[26rem]">
-						{isTeacher ? (
-							<>
-								<div className="rounded-2xl border border-white/15 bg-white/10 p-4 backdrop-blur-sm">
-									<div className="text-white/60 text-xs uppercase tracking-[0.22em]">
-										Pending approvals
-									</div>
-									<div className="mt-2 font-semibold text-3xl">
-										{overview.teacher?.metrics.pendingApprovalCount ?? 0}
-									</div>
-								</div>
-								<div className="rounded-2xl border border-white/15 bg-white/10 p-4 backdrop-blur-sm">
-									<div className="text-white/60 text-xs uppercase tracking-[0.22em]">
-										Attendance backlog
-									</div>
-									<div className="mt-2 font-semibold text-3xl">
-										{overview.teacher?.metrics.attendanceBacklogCount ?? 0}
-									</div>
-								</div>
-							</>
-						) : (
-							<>
-								<div className="rounded-2xl border border-white/15 bg-white/10 p-4 backdrop-blur-sm">
-									<div className="text-white/60 text-xs uppercase tracking-[0.22em]">
-										Upcoming bookings
-									</div>
-									<div className="mt-2 font-semibold text-3xl">
-										{overview.student?.metrics.upcomingBookingsCount ?? 0}
-									</div>
-								</div>
-								<div className="rounded-2xl border border-white/15 bg-white/10 p-4 backdrop-blur-sm">
-									<div className="text-white/60 text-xs uppercase tracking-[0.22em]">
-										Attendance rate
-									</div>
-									<div className="mt-2 font-semibold text-3xl">
-										{overview.student?.metrics.attendanceRate ?? 0}%
-									</div>
-								</div>
-							</>
-						)}
-					</div>
-				</div>
+			<div className="mb-8">
+				<h1 className="font-semibold text-3xl">
+					{isTeacher ? "Lab Operations Center" : "Dashboard"}
+				</h1>
+				<p className="mt-1 text-muted-foreground">
+					{isTeacher
+						? `Keep ${overview.user.firstName}'s labs running clean, on time, and accountable.`
+						: "Track every reservation, seat, and lab item from one place."}
+				</p>
 			</div>
 
 			{overview.user.isBanned && !isTeacher && (
