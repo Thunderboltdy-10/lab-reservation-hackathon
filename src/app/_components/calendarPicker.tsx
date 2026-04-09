@@ -92,6 +92,7 @@ const CalendarPicker = ({
 	const [endAuto, setEndAuto] = React.useState(true);
 
 	const [isPopupOpenAdd, setIsPopupOpenAdd] = useState(false);
+	const [, setLockTick] = useState(0);
 
 	const [booking, setBooking] = useAtom(isBookingAtom);
 	const [equipment, setEquipment] = useAtom(equipmentAtom);
@@ -296,17 +297,31 @@ const CalendarPicker = ({
 
 	const controlsLocked = booking !== null || equipment !== null;
 
+	useEffect(() => {
+		const interval = setInterval(() => {
+			setLockTick((value) => value + 1);
+		}, 30000);
+
+		return () => clearInterval(interval);
+	}, []);
+
+	const isSessionLocked = (startAt: Date) => {
+		const nowMs = Date.now();
+		const lockThresholdMs = startAt.getTime() - 15 * 60 * 1000;
+		return nowMs >= lockThresholdMs;
+	};
+
 	return (
-		<div className="flex flex-col lg:flex-row h-full justify-center gap-8 lg:gap-24 p-6 lg:p-12 rounded-[2rem] border border-border/50 bg-card/40 shadow-sm">
+		<div className="flex flex-col lg:flex-row justify-center gap-12 lg:gap-32 mt-12 mb-12">
 			<div className="flex justify-center lg:block">
 				<Calendar 
 					mode="single" 
 					selected={date} 
 					onSelect={setDate} 
-					className="rounded-2xl border border-border/50 bg-background/50 scale-[1.15] md:scale-125 transform-gpu shadow-sm origin-top lg:origin-top-right mt-4"
+					className="rounded-2xl border border-border/50 bg-background/50 scale-[1.15] md:scale-125 transform-gpu shadow-sm origin-top mt-4"
 				/>
 			</div>
-			<div className="flex flex-1 flex-col items-center lg:items-start gap-4 max-w-2xl">
+			<div className="flex flex-col items-center lg:items-start gap-4 w-full max-w-sm">
 				<div className="font-bold text-2xl md:text-3xl tracking-tight">
 					<span>
 						{date ? formatDateInSchoolTZ(date, "EEEE, MMMM d, yyyy") : ""}
@@ -317,68 +332,69 @@ const CalendarPicker = ({
 					<Clock className="h-4 w-4" />
 					<span>Times shown in {SCHOOL_TIMEZONE}</span>
 				</div>
-				<div className="flex max-h-full w-full lg:min-w-[450px] flex-col gap-4 overflow-y-auto rounded-[1.5rem] border border-border/50 bg-card/60 p-6 shadow-sm">
-					<div
-						className={`flex items-center pb-2 ${isTeacher === true ? "justify-between" : "justify-center"}`}
-					>
-						<div className="font-bold text-foreground text-2xl tracking-tight">
-							Sessions
-						</div>
-						{isTeacher === true && (
-							<Popover open={isPopupOpenAdd} onOpenChange={setIsPopupOpenAdd}>
-								<PopoverTrigger asChild>
-									<Button variant="secondary" disabled={controlsLocked}>
-										+ Add Session
-									</Button>
-								</PopoverTrigger>
-								<PopoverContent>
-									<h3 className="mb-1">Start Time:</h3>
-									<Input
-										type="time"
-										value={
-											startDate
-												? formatTimeInSchoolTZ(startDate, "HH:mm")
-												: getCurrentTimeInSchoolTZ()
-										}
-										onChange={(e) => {
-											if (date) {
-												const newStart = createDateInSchoolTZ(
-													date,
-													e.target.value,
-												);
-												setStartDate(newStart);
-												if (endAuto) {
-													setEndDate(addMinutes(newStart, 55));
-												}
-											}
-										}}
-									/>
-									<h3 className="mt-3 mb-1">End Time:</h3>
-									<Input
-										type="time"
-										value={
-											endDate
-												? formatTimeInSchoolTZ(endDate, "HH:mm")
-												: getCurrentTimeInSchoolTZ()
-										}
-										onChange={(e) => {
-											if (date) {
-												const newEnd = createDateInSchoolTZ(
-													date,
-													e.target.value,
-												);
-												setEndDate(newEnd);
-												setEndAuto(false);
-											}
-										}}
-									/>
-									<Button className="mt-5 w-full" onClick={createSession}>
-										Create
-									</Button>
-								</PopoverContent>
-							</Popover>
-						)}
+				<div className="flex w-full flex-col gap-4">
+				<div
+					className={`flex items-center pb-2 ${isTeacher === true ? "justify-between" : ""}`}
+				>
+					<div className="font-bold text-foreground text-2xl tracking-tight">
+						Sessions
 					</div>
+					{isTeacher === true && (
+						<Popover open={isPopupOpenAdd} onOpenChange={setIsPopupOpenAdd}>
+							<PopoverTrigger asChild>
+								<Button variant="secondary" disabled={controlsLocked}>
+									+ Add Session
+								</Button>
+							</PopoverTrigger>
+							<PopoverContent>
+								<h3 className="mb-1">Start Time:</h3>
+								<Input
+									type="time"
+									value={
+										startDate
+											? formatTimeInSchoolTZ(startDate, "HH:mm")
+											: getCurrentTimeInSchoolTZ()
+									}
+									onChange={(e) => {
+										if (date) {
+											const newStart = createDateInSchoolTZ(
+												date,
+												e.target.value,
+											);
+											setStartDate(newStart);
+											if (endAuto) {
+												setEndDate(addMinutes(newStart, 55));
+											}
+										}
+									}}
+								/>
+								<h3 className="mt-3 mb-1">End Time:</h3>
+								<Input
+									type="time"
+									value={
+										endDate
+											? formatTimeInSchoolTZ(endDate, "HH:mm")
+											: getCurrentTimeInSchoolTZ()
+									}
+									onChange={(e) => {
+										if (date) {
+											const newEnd = createDateInSchoolTZ(
+												date,
+												e.target.value,
+											);
+											setEndDate(newEnd);
+											setEndAuto(false);
+										}
+									}}
+								/>
+								<Button className="mt-5 w-full" onClick={createSession}>
+									Create
+								</Button>
+							</PopoverContent>
+						</Popover>
+					)}
+				</div>
+				<div className="flex flex-col gap-3 max-h-[380px] overflow-y-auto pr-2 custom-scrollbar">
 					{data?.length === 0 && (
 						<div className="mt-2 flex justify-center">
 							<div className="text-muted-foreground">
@@ -386,11 +402,13 @@ const CalendarPicker = ({
 							</div>
 						</div>
 					)}
-					{data?.map((sess) => (
-						<div key={sess.id}>
-							<div className="flex flex-col">
-								<div
-									className={`relative w-full rounded-lg border bg-card p-1 text-center ${
+						{data?.map((sess) => {
+							const locked = isSessionLocked(new Date(sess.startAt)) && !isTeacher;
+							return (
+								<div key={sess.id}>
+								<div className="flex flex-col">
+									<div
+										className={`relative w-full rounded-lg border bg-card p-1 text-center ${
 										booking === sess.id || equipment === sess.id
 											? "ring-2 ring-primary"
 											: ""
@@ -408,26 +426,26 @@ const CalendarPicker = ({
 										{sess.createdBy.lastName}
 									</div>
 									<div className="mt-3 grid grid-cols-2 gap-2 p-2">
-										{booking !== sess.id ? (
-											<Button
-												className="flex-1"
-												variant="secondary"
-												onClick={() => {
-													if (equipment !== null) {
-														toast.error(
+											{booking !== sess.id ? (
+												<Button
+													className="flex-1"
+													variant={locked ? "outline" : "secondary"}
+													onClick={() => {
+														if (equipment !== null) {
+															toast.error(
 															"Finish session equipment first to book a seat",
 														);
 														return;
 													}
 													setEquipment(null);
-													setBooking(sess.id);
-													toast("Press esc to cancel booking");
-												}}
-												disabled={equipment !== null}
-											>
-												Book
-											</Button>
-										) : (
+														setBooking(sess.id);
+														toast("Press esc to cancel booking");
+													}}
+													disabled={equipment !== null || locked}
+												>
+													{locked ? "Locked" : "Book"}
+												</Button>
+											) : (
 											<Button
 												className="flex-1"
 												onClick={() => setBooking(null)}
@@ -589,7 +607,9 @@ const CalendarPicker = ({
 								</div>
 							</div>
 						</div>
-					))}
+							);
+						})}
+				</div>
 				</div>
 			</div>
 		</div>

@@ -29,6 +29,23 @@ enum BookingStatus {
 enum EquipmentUnit {
   UNIT
   ML
+  G
+  MG
+  L
+  BOX
+  TABLETS
+}
+
+enum NotificationType {
+  SESSION_REMINDER
+  BOOKING_CONFIRMED
+  BOOKING_APPROVED
+  BOOKING_REJECTED
+  BOOKING_CANCELLED
+  ATTENDANCE_NEEDED
+  USAGE_REPORT_NEEDED
+  EQUIPMENT_LOW_STOCK
+  USAGE_CORRECTED
 }
 
 model User {
@@ -52,6 +69,7 @@ model User {
   equipmentBookings EquipmentBooking[]
   attendances       Attendance[]
   markedAttendances Attendance[]       @relation("MarkedByUser")
+  notifications     Notification[]
 }
 
 model Lab {
@@ -133,10 +151,15 @@ model Equipment {
   id          String   @id @default(cuid())
   labId       String
   lab         Lab      @relation(fields: [labId], references: [id])
+  category    String   @default("General")
   name        String
+  casNumber   String?
   description String?
   total       Int      @default(0)
   unitType    EquipmentUnit @default(UNIT)
+  brand       String?
+  location    String?
+  sdsLink     String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -146,6 +169,9 @@ model Equipment {
 
   sessionAvailability SessionEquipment[]
   bookings            EquipmentBooking[]
+
+  @@index([labId, category])
+  @@index([expirationDate])
 }
 
 model SessionEquipment {
@@ -176,11 +202,33 @@ model EquipmentBooking {
   createdAt     DateTime     @default(now())
 
   // Usage reporting fields
-  actualUsed Int?
-  reportedAt DateTime?
+  actualUsed    Int?
+  reportedAt    DateTime?
+
+  // Teacher correction fields
+  correctedUsed Int?
+  correctedBy   String?
+  correctedAt   DateTime?
 
   @@unique([userId, sessionId, equipmentId])
   @@index([sessionId, equipmentId])
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      NotificationType
+  sessionId String?
+  title     String
+  message   String
+  link      String?
+  read      Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  @@unique([userId, type, sessionId])
+  @@index([userId, read])
+  @@index([userId, createdAt])
 }
 
 model Attendance {

@@ -1,6 +1,8 @@
 "use client";
 import {
+	Bell,
 	Book,
+	CheckCheck,
 	ChevronDown,
 	ClipboardCheck,
 	FlaskConical,
@@ -32,12 +34,18 @@ import {
 import Image from "next/image";
 import Link from "next/link";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
 	Collapsible,
 	CollapsibleContent,
 	CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import {
+	Popover,
+	PopoverContent,
+	PopoverTrigger,
+} from "@/components/ui/popover";
 import {
 	Sheet,
 	SheetContent,
@@ -47,9 +55,140 @@ import {
 } from "@/components/ui/sheet";
 import { api } from "@/trpc/react";
 import { UserButton } from "@clerk/nextjs";
+import { formatDistanceToNow } from "date-fns";
 import { useTheme } from "next-themes";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
+
+const notificationTypeLabel: Record<string, string> = {
+	SESSION_REMINDER: "Session Reminder",
+	BOOKING_CONFIRMED: "Booking Confirmed",
+	BOOKING_APPROVED: "Booking Approved",
+	BOOKING_REJECTED: "Booking Rejected",
+	BOOKING_CANCELLED: "Booking Cancelled",
+	ATTENDANCE_NEEDED: "Attendance Required",
+	USAGE_REPORT_NEEDED: "Usage Report Due",
+	EQUIPMENT_LOW_STOCK: "Low Stock Alert",
+	USAGE_CORRECTED: "Usage Corrected",
+};
+
+function NotificationBell({ compact = false }: { compact?: boolean }) {
+	const utils = api.useUtils();
+	const router = useRouter();
+	const { data: unreadData, refetch } = api.notifications.getUnreadCount.useQuery(undefined, {
+		refetchInterval: 60000, // Poll every minute
+	});
+	const { data: notifications } = api.notifications.getAll.useQuery({ take: 15 });
+	const markAllRead = api.notifications.markAllRead.useMutation({
+		onSuccess: () => {
+			utils.notifications.getUnreadCount.invalidate();
+			utils.notifications.getAll.invalidate();
+		},
+	});
+	const markRead = api.notifications.markRead.useMutation({
+		onSuccess: () => {
+			utils.notifications.getUnreadCount.invalidate();
+			utils.notifications.getAll.invalidate();
+		},
+	});
+
+	const unreadCount = unreadData?.count ?? 0;
+
+	const handleOpen = (open: boolean) => {
+		if (!open && unreadCount > 0) {
+			markAllRead.mutate();
+		}
+	};
+
+	return (
+			<Popover onOpenChange={handleOpen}>
+				<PopoverTrigger asChild>
+					<Button
+						variant="ghost"
+						size="icon"
+						className="relative"
+						title="Notifications"
+						aria-label="Notifications"
+					>
+						<Bell className="h-5 w-5" />
+						{unreadCount > 0 && (
+						<span className="absolute -top-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-[10px] font-bold text-destructive-foreground">
+							{unreadCount > 9 ? "9+" : unreadCount}
+						</span>
+					)}
+				</Button>
+			</PopoverTrigger>
+			<PopoverContent
+				side={compact ? "top" : "right"}
+				align="end"
+				className="w-80 p-0 rounded-2xl shadow-xl"
+			>
+				<div className="flex items-center justify-between border-b px-4 py-3">
+					<span className="font-semibold text-sm">Notifications</span>
+					{unreadCount > 0 && (
+						<button
+							type="button"
+							onClick={() => markAllRead.mutate()}
+							className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+						>
+							<CheckCheck className="h-3.5 w-3.5" />
+							Mark all read
+						</button>
+					)}
+				</div>
+				<div className="max-h-96 overflow-y-auto divide-y divide-border/40">
+					{!notifications || notifications.length === 0 ? (
+						<div className="py-10 text-center text-sm text-muted-foreground">
+							<Bell className="mx-auto mb-2 h-6 w-6 opacity-30" />
+							No notifications yet
+						</div>
+					) : (
+						notifications.map((n) => (
+								<button
+									type="button"
+									key={n.id}
+									onClick={async () => {
+										if (!n.read) {
+											try {
+												await markRead.mutateAsync({ id: n.id });
+											} catch {
+												// Non-fatal for navigation.
+											}
+										}
+
+										if (!n.link) return;
+										if (n.link.startsWith("/")) {
+											router.push(n.link);
+											return;
+										}
+										window.location.href = n.link;
+									}}
+									className={`w-full text-left px-4 py-3 hover:bg-muted/50 transition-colors ${n.read ? "opacity-60" : ""}`}
+							>
+								<div className="flex items-start gap-2">
+									{!n.read && <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-primary" />}
+									{n.read && <span className="mt-1.5 h-2 w-2 shrink-0" />}
+									<div className="flex-1 min-w-0">
+										<div className="flex items-center gap-1.5 mb-0.5">
+											<span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+												{notificationTypeLabel[n.type] ?? n.type}
+											</span>
+										</div>
+										<p className="text-xs font-medium leading-snug">{n.title}</p>
+										<p className="text-xs text-muted-foreground leading-snug mt-0.5">{n.message}</p>
+										<p className="text-[10px] text-muted-foreground mt-1">
+											{formatDistanceToNow(new Date(n.createdAt), { addSuffix: true })}
+										</p>
+									</div>
+								</div>
+							</button>
+						))
+					)}
+				</div>
+			</PopoverContent>
+		</Popover>
+	);
+}
 
 const items = [
 	{
@@ -218,6 +357,7 @@ function MobileNav({ role }: { role: string | undefined }) {
 				<div className="absolute right-0 bottom-0 left-0 border-t p-4">
 					<div className="flex items-center justify-between">
 						<UserButton />
+						<NotificationBell compact />
 						<Button
 							variant="ghost"
 							size="icon"
@@ -410,8 +550,9 @@ export function AppSidebar() {
 						{state === "expanded" ? (
 							<>
 								<Separator />
-								<div className="flex items-center justify-start gap-3 px-4 py-2">
+								<div className="flex items-center justify-start gap-2 px-4 py-2">
 									<UserButton />
+									<NotificationBell />
 									<Button
 										variant="ghost"
 										size="icon"
@@ -449,6 +590,7 @@ export function AppSidebar() {
 											<SunIcon className="h-5 w-5" />
 										)}
 									</Button>
+									<NotificationBell compact />
 									<UserButton />
 								</div>
 							</>

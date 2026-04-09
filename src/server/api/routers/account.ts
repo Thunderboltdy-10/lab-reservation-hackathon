@@ -4,7 +4,7 @@ import {
 	sendBookingStatusEmail,
 	sendTeacherBookingRequestEmail,
 } from "@/server/services/email";
-import type { Role } from "@prisma/client";
+import type { Role, EquipmentUnit } from "@prisma/client";
 import { TRPCError } from "@trpc/server";
 import { fromZonedTime, toZonedTime } from "date-fns-tz";
 import z from "zod";
@@ -1687,7 +1687,7 @@ export const accountRouter = createTRPCRouter({
 							items: {
 								equipmentBookingId: string;
 								equipmentName: string;
-								unitType: "UNIT" | "ML";
+								unitType: EquipmentUnit;
 								amount: number;
 								actualUsed: number | null;
 								reportedAt: Date | null;
@@ -2424,9 +2424,14 @@ export const accountRouter = createTRPCRouter({
 			z.object({
 				labId: z.string(),
 				name: z.string(),
-				total: z.number(),
+				total: z.number().int().nonnegative(),
 				expirationDate: z.date().optional(),
-				unitType: z.enum(["UNIT", "ML"]),
+				unitType: z.enum(["UNIT", "ML", "G", "MG", "L", "BOX", "TABLETS"]),
+				category: z.string().optional(),
+				casNumber: z.string().optional(),
+				brand: z.string().optional(),
+				location: z.string().optional(),
+				sdsLink: z.string().optional(),
 			}),
 		)
 		.mutation(async ({ ctx, input }) => {
@@ -2437,6 +2442,11 @@ export const accountRouter = createTRPCRouter({
 					total: input.total,
 					unitType: input.unitType,
 					expirationDate: input.expirationDate,
+					category: input.category,
+					casNumber: input.casNumber,
+					brand: input.brand,
+					location: input.location,
+					sdsLink: input.sdsLink,
 					createdBy: ctx.auth.userId,
 				},
 			});
@@ -2445,14 +2455,14 @@ export const accountRouter = createTRPCRouter({
 	getLabEquipment: privateProcedure
 		.input(
 			z.object({
-				labId: z.string(),
+				labId: z.string().optional(),
 			}),
 		)
 		.query(async ({ ctx, input }) => {
 			return await ctx.db.equipment.findMany({
-				where: {
+				where: input.labId && input.labId !== "all" ? {
 					labId: input.labId,
-				},
+				} : undefined,
 				select: {
 					id: true,
 					name: true,
@@ -2460,9 +2470,15 @@ export const accountRouter = createTRPCRouter({
 					unitType: true,
 					expirationDate: true,
 					createdBy: true,
+					category: true,
+					casNumber: true,
+					brand: true,
+					location: true,
+					sdsLink: true,
+					lab: { select: { name: true } },
 				},
 				orderBy: {
-					total: "desc",
+					category: "asc",
 				},
 			});
 		}),
@@ -2526,9 +2542,14 @@ export const accountRouter = createTRPCRouter({
 			z.object({
 				id: z.string(),
 				name: z.string().optional(),
-				total: z.number().optional(),
-				unitType: z.enum(["UNIT", "ML"]).optional(),
+				total: z.number().int().nonnegative().optional(),
+				unitType: z.enum(["UNIT", "ML", "G", "MG", "L", "BOX", "TABLETS"]).optional(),
 				expirationDate: z.date().nullish(),
+				category: z.string().optional(),
+				casNumber: z.string().optional(),
+				brand: z.string().optional(),
+				location: z.string().optional(),
+				sdsLink: z.string().optional(),
 			}),
 		)
 		.mutation(async ({ ctx, input }) => {
@@ -2539,6 +2560,11 @@ export const accountRouter = createTRPCRouter({
 					total: input.total,
 					unitType: input.unitType,
 					expirationDate: input.expirationDate,
+					category: input.category,
+					casNumber: input.casNumber,
+					brand: input.brand,
+					location: input.location,
+					sdsLink: input.sdsLink,
 				},
 			});
 		}),
@@ -2847,6 +2873,100 @@ export const accountRouter = createTRPCRouter({
 				include: {
 					equipment: { select: { name: true } },
 				},
+			});
+		}),
+
+	// Teacher/Admin - correct a student's reported equipment usage
+	correctEquipmentUsage: teacherProcedure
+		.input(
+			z.object({
+				equipmentBookingId: z.string(),
+				correctedUsed: z.number().min(0),
+			}),
+		)
+		.mutation(async ({ ctx, input }) => {
+			const booking = await ctx.db.equipmentBooking.findUnique({
+				where: { id: input.equipmentBookingId },
+				include: {
+					session: { select: { id: true, createdById: true } },
+				},
+			});
+
+			if (!booking) {
+				throw new TRPCError({
+					code: "NOT_FOUND",
+					message: "Equipment booking not found",
+				});
+			}
+
+			await ensureManagedSessionAccess({
+				database: ctx.db,
+				sessionId: booking.session.id,
+				userId: ctx.auth.userId,
+				role: ctx.userRole,
+			});
+
+			if (input.correctedUsed > booking.amount) {
+				throw new TRPCError({
+					code: "BAD_REQUEST",
+					message: "Corrected usage cannot exceed the amount originally booked.",
+				});
+			}
+
+			const updated = await ctx.db.equipmentBooking.update({
+				where: { id: input.equipmentBookingId },
+				data: {
+					...(booking.actualUsed === null
+						? {
+								actualUsed: input.correctedUsed,
+								reportedAt: new Date(),
+							}
+						: {}),
+					correctedUsed: input.correctedUsed,
+					correctedBy: ctx.auth.userId,
+					correctedAt: new Date(),
+				},
+			});
+
+			// Send in-app notification to student
+			try {
+				await ctx.db.notification.create({
+					data: {
+						userId: booking.userId,
+						type: "USAGE_CORRECTED",
+						title: "Equipment Usage Corrected",
+						message: `A teacher has corrected your equipment usage report.`,
+						link: "/dashboard",
+					},
+				});
+			} catch {
+				// notification failure is non-fatal
+			}
+
+			return updated;
+		}),
+
+	// Get session equipment usage summary (for teacher review)
+	getSessionUsageSummary: teacherProcedure
+		.input(z.object({ sessionId: z.string() }))
+		.query(async ({ ctx, input }) => {
+			await ensureManagedSessionAccess({
+				database: ctx.db,
+				sessionId: input.sessionId,
+				userId: ctx.auth.userId,
+				role: ctx.userRole,
+			});
+
+			return await ctx.db.equipmentBooking.findMany({
+				where: { sessionId: input.sessionId },
+				include: {
+					user: { select: { firstName: true, lastName: true, email: true } },
+					equipment: { select: { name: true, unitType: true } },
+				},
+				orderBy: [
+					{ user: { lastName: "asc" } },
+					{ equipment: { name: "asc" } },
+				],
 			});
 		}),
 });

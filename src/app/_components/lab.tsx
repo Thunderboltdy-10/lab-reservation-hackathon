@@ -30,6 +30,7 @@ import useLab from "@/hooks/use-lab";
 import { equipmentAtom, isBookingAtom } from "@/lib/atoms";
 import { api } from "@/trpc/react";
 import { useAuth } from "@clerk/nextjs";
+import { type EquipmentUnit } from "@prisma/client";
 import { useAtom } from "jotai";
 import {
 	Check,
@@ -39,6 +40,7 @@ import {
 	Settings,
 	Trash2,
 	X,
+    Search,
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import type React from "react";
@@ -62,19 +64,13 @@ const Lab = ({
 }: { isPhysics: boolean; isTeacher: boolean }) => {
 	const [booking, setBooking] = useAtom(isBookingAtom);
 	const [equipment, setEquipment] = useAtom(equipmentAtom);
-	const [displayedLabEquipment, setDisplayedLabEquipment] = useState<
-		{ id: string; name: string; total: number; unitType: "UNIT" | "ML" }[]
-	>([]);
-	const [editedLabEquipment, setEditedLabEquipment] = useState<
-		{ id: string; name: string; total: number; unitType: "UNIT" | "ML" }[]
-	>([]);
 	const [sessionEquipmentDraft, setSessionEquipmentDraft] = useState<
 		{
 			name: string;
 			id: string;
 			total: number;
 			available: number;
-			unitType: "UNIT" | "ML";
+			unitType: EquipmentUnit;
 		}[]
 	>([]);
 	const [bookingEquipmentDraft, setBookingEquipmentDraft] = useState<
@@ -83,16 +79,38 @@ const Lab = ({
 			id: string;
 			total: number;
 			available: number;
-			unitType: "UNIT" | "ML";
+			unitType: EquipmentUnit;
 		}[]
 	>([]);
 
-	const [templateVisible, setTemplateVisible] = useState(false);
+	const [labEquipmentSearch, setLabEquipmentSearch] = useState("");
+	const [labEqVisibleCount, setLabEqVisibleCount] = useState(15);
+	const [sessionEqSearch, setSessionEqSearch] = useState("");
+	const [sessionEqVisibleCount, setSessionEqVisibleCount] = useState(15);
+	const [bookingEqSearch, setBookingEqSearch] = useState("");
+	const [bookingEqVisibleCount, setBookingEqVisibleCount] = useState(15);
+
+	// Lab inventory add/edit dialog state
+	const [labAddOpen, setLabAddOpen] = useState(false);
+	const [labEditItem, setLabEditItem] = useState<{
+		id: string;
+		name: string;
+		total: number;
+		unitType: EquipmentUnit;
+		category: string;
+		casNumber: string;
+		brand: string;
+		location: string;
+		expirationDate: Date | null;
+	} | null>(null);
 	const [templateName, setTemplateName] = useState("");
 	const [templateTotal, setTemplateTotal] = useState(1);
-	const [templateUnitType, setTemplateUnitType] = useState<"UNIT" | "ML">(
-		"UNIT",
-	);
+	const [templateUnitType, setTemplateUnitType] = useState<EquipmentUnit>("UNIT");
+	const [templateCategory, setTemplateCategory] = useState("");
+	const [templateBrand, setTemplateBrand] = useState("");
+	const [templateCasNumber, setTemplateCasNumber] = useState("");
+	const [templateLocation, setTemplateLocation] = useState("");
+	const [templateExpiration, setTemplateExpiration] = useState("");
 
 	// Dynamic Seating State
 	const [configVisible, setConfigVisible] = useState(false);
@@ -147,8 +165,17 @@ const Lab = ({
 	);
 	const seatIds = seats ?? [];
 
-	const unitLabel = (unitType: "UNIT" | "ML") =>
-		unitType === "ML" ? "mL" : "qty";
+	const unitLabel = (unitType: EquipmentUnit) => {
+		switch (unitType) {
+			case "ML": return "mL";
+			case "G": return "g";
+			case "MG": return "mg";
+			case "L": return "L";
+			case "BOX": return "boxes";
+			case "TABLETS": return "tabs";
+			default: return "qty";
+		}
+	};
 
 	const effectiveConfig = useMemo<LabConfig>(() => {
 		if (hasConfig) return config;
@@ -326,14 +353,17 @@ const Lab = ({
 				labId: labData.id,
 				total: templateTotal,
 				unitType: templateUnitType,
+				category: templateCategory.trim() || undefined,
+				brand: templateBrand.trim() || undefined,
+				casNumber: templateCasNumber.trim() || undefined,
+				location: templateLocation.trim() || undefined,
+				expirationDate: templateExpiration ? new Date(templateExpiration) : undefined,
 			},
 			{
 				onSuccess: () => {
 					toast.success(`${templateName} successfully added`);
-					setTemplateVisible(false);
-					setTemplateName("");
-					setTemplateTotal(1);
-					setTemplateUnitType("UNIT");
+					setLabAddOpen(false);
+					resetAddLabTemplate();
 					refetchLabEquipment();
 				},
 				onError: (error) => {
@@ -341,6 +371,17 @@ const Lab = ({
 				},
 			},
 		);
+	};
+
+	const resetAddLabTemplate = () => {
+		setTemplateName("");
+		setTemplateTotal(1);
+		setTemplateUnitType("UNIT");
+		setTemplateCategory("");
+		setTemplateBrand("");
+		setTemplateCasNumber("");
+		setTemplateLocation("");
+		setTemplateExpiration("");
 	};
 
 	const deleteLabEquipment = (id: string) => {
@@ -360,20 +401,24 @@ const Lab = ({
 		);
 	};
 
-	const updateLabEquipment = (id: string) => {
-		const eq = editedLabEquipment.find((e) => e.id === id);
-		if (!eq) return;
-
+	const handleEditLabEquipmentSave = () => {
+		if (!labEditItem) return;
 		updateLabEquipmentMutation.mutate(
 			{
-				id: eq.id,
-				name: eq.name,
-				total: eq.total,
-				unitType: eq.unitType,
+				id: labEditItem.id,
+				name: labEditItem.name,
+				total: labEditItem.total,
+				unitType: labEditItem.unitType,
+				category: labEditItem.category.trim() || undefined,
+				brand: labEditItem.brand.trim() || undefined,
+				casNumber: labEditItem.casNumber.trim() || undefined,
+				location: labEditItem.location.trim() || undefined,
+				expirationDate: labEditItem.expirationDate,
 			},
 			{
 				onSuccess: () => {
-					toast.success("Equipment successfully updated");
+					toast.success("Equipment updated");
+					setLabEditItem(null);
 					refetchLabEquipment();
 				},
 				onError: (error) => {
@@ -462,17 +507,7 @@ const Lab = ({
 		refetchSessionEquipment();
 	}, [activeSessionId, refetchSessionEquipment]);
 
-	useEffect(() => {
-		if (!labEquipment) return;
-		setDisplayedLabEquipment(
-			labEquipment.map((e) => ({
-				id: e.id,
-				name: e.name,
-				total: e.total,
-				unitType: e.unitType,
-			})),
-		);
-	}, [labEquipment]);
+	// labEquipment from query is the source of truth - no local copy needed
 
 	// State Sync Effect & Initial State (booking details only)
 	const bookingInitRef = useRef<string | null>(null);
@@ -588,7 +623,8 @@ const Lab = ({
 		if (activeSessionId !== prevSessionRef.current) {
 			setSelectedSeat(null);
 			setPendingSeat(null);
-			setTemplateVisible(false);
+			setLabAddOpen(false);
+			setLabEditItem(null);
 			setNotes("");
 			// setBookingEquipmentDraft([]) - Managed by init effect
 			// setSessionEquipmentDraft([]) - Managed by init effect
@@ -663,6 +699,30 @@ const Lab = ({
 		return false;
 	}, [equipment, sessionEquipment, sessionEquipmentDraft]);
 
+	const existingCategories = useMemo(() => {
+		if (!labEquipment) return [];
+		return Array.from(new Set(labEquipment.map(e => e.category).filter(Boolean))).sort() as string[];
+	}, [labEquipment]);
+
+	const existingBrands = useMemo(() => {
+		if (!labEquipment) return [];
+		return Array.from(new Set(labEquipment.map(e => e.brand).filter(Boolean))).sort() as string[];
+	}, [labEquipment]);
+
+	const filteredLabEquipment = useMemo(() => {
+		const search = labEquipmentSearch.trim().toLowerCase();
+		return (labEquipment ?? [])
+			.filter((item) => item.name.toLowerCase().includes(search))
+			.slice(0, labEqVisibleCount);
+	}, [labEquipment, labEquipmentSearch, labEqVisibleCount]);
+
+	const filteredSessionLabEquipment = useMemo(() => {
+		const search = sessionEqSearch.trim().toLowerCase();
+		return (labEquipment ?? [])
+			.filter((item) => item.name.toLowerCase().includes(search))
+			.slice(0, sessionEqVisibleCount);
+	}, [labEquipment, sessionEqSearch, sessionEqVisibleCount]);
+
 	const reservedById = useMemo(() => {
 		return new Map(
 			(sessionEquipment ?? []).map((eq) => [eq.equipmentId, eq.reserved]),
@@ -677,7 +737,7 @@ const Lab = ({
 	const isEquipmentFocus =
 		booking !== null ||
 		equipment !== null ||
-		templateVisible ||
+		labAddOpen ||
 		pendingSeat !== null;
 	const labPanelClass = showEquipmentPanel
 		? isEquipmentFocus
@@ -687,22 +747,18 @@ const Lab = ({
 	const equipmentPanelClass = isEquipmentFocus ? "w-full lg:basis-[44%]" : "w-full lg:basis-[40%]";
 
 	return (
-		<div className="flex min-h-screen flex-col bg-background/50 pb-12">
-			<div className="flex-none px-4 pt-8 md:px-8 md:pt-12 pb-8">
-				<div className="mb-10 text-center">
-					<div className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-4 py-1.5 mb-4">
-						<span className="text-sm font-medium text-primary">Lab Environment</span>
-					</div>
-					<h1 className="flex items-center justify-center font-bold text-4xl md:text-5xl tracking-tight text-foreground">
-						{isPhysics ? "Physics & Chemistry Facility" : "Biology & Life Sciences"}
-					</h1>
-					<p className="mt-4 text-muted-foreground max-w-xl mx-auto">
-						Manage seat reservations and equipment requests for upcoming sessions.
-					</p>
-				</div>
-				<div className="mx-auto flex flex-col lg:flex-row w-full max-w-[1600px] items-stretch gap-8 transition-all duration-500 ease-spring">
+		<div className="container mx-auto w-full max-w-[1600px] p-6 pb-12">
+			<div className="mb-8">
+				<h1 className="font-semibold text-3xl">
+					{isPhysics ? "Physics & Chemistry Facility" : "Biology & Life Sciences"}
+				</h1>
+				<p className="mt-1 text-muted-foreground">
+					Manage seat reservations and equipment requests for upcoming sessions.
+				</p>
+			</div>
+			<div className="mx-auto flex flex-col lg:flex-row w-full items-stretch gap-8 transition-all duration-500 ease-spring">
 					<div
-						className={`relative flex ${labPanelClass} flex-col items-center justify-center rounded-[2rem] border bg-gradient-to-br from-card/80 via-card/50 to-muted/30 p-8 shadow-sm transition-[flex-basis] duration-500 ease-in-out ${activeSessionId !== null ? "border-transparent outline-blue shadow-lg" : "border-border/50"}`}
+						className={`relative flex ${labPanelClass} flex-col items-center justify-center rounded-[2rem] border bg-gradient-to-br from-card/80 via-card/50 to-muted/30 p-8 shadow-sm transition-[flex-basis] duration-500 ease-in-out ${booking !== null ? "border-transparent outline-blue shadow-lg" : "border-border/50"}`}
 					>
 						{isLate && !isTeacher && booking && (
 							<div className="-translate-x-1/2 fade-in slide-in-from-top-4 absolute top-4 left-1/2 z-10 flex animate-in items-center gap-2 rounded-full border border-destructive/20 bg-destructive/10 px-4 py-2 font-medium text-destructive text-sm">
@@ -873,370 +929,133 @@ const Lab = ({
 					</div>
 					{showEquipmentPanel && (
 						<div
-							className={`flex ${equipmentPanelClass} relative flex-col gap-6 rounded-[2rem] border border-border/50 bg-card/60 p-6 md:p-8 shadow-sm transition-[flex-basis] duration-500 ease-in-out ${booking !== null || equipment !== null ? "outline-blue shadow-lg" : ""} max-h-[60vh] lg:max-h-none`}
+							className={`flex ${equipmentPanelClass} relative flex-col gap-4 rounded-[2rem] border bg-card/60 p-5 md:p-6 shadow-sm transition-[flex-basis] duration-500 ease-in-out ${equipment !== null ? "border-transparent outline-green shadow-lg" : booking !== null ? "border-transparent outline-blue shadow-lg" : "border-border/50"} h-[500px] max-h-[70vh] lg:max-h-[600px]`}
 						>
 							<div
 								className={`flex items-center ${booking === null && equipment === null ? "justify-between" : "justify-center"}`}
 							>
 								<div
-									className={`pl-2 font-semibold text-foreground text-xl ${booking === null && equipment === null ? "" : "pt-2"}`}
+									className={`pl-2 font-semibold text-foreground text-lg ${booking === null && equipment === null ? "" : "pt-1"}`}
 								>
 									{booking
 										? "Session Equipment"
 										: equipment
 											? "Edit Session Equipment"
-											: "Lab Equipment"}
+											: "Lab Inventory"}
 								</div>
 								{booking === null && equipment === null && isTeacher && (
 									<Button
 										variant={theme === "dark" ? "default" : "secondary"}
-										onClick={() => setTemplateVisible(true)}
+										onClick={() => {
+											resetAddLabTemplate();
+											setLabAddOpen(true);
+										}}
+										size="sm"
+										className="rounded-xl shadow-sm h-8"
 									>
-										+ Add Equipment
+										+ Add
 									</Button>
 								)}
 							</div>
-							<div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto pr-1">
-								{templateVisible && !booking && !equipment && (
-									<div className="w-full rounded-lg border border-border/60 bg-muted/30 p-2 text-foreground">
-										<div className="flex flex-wrap items-center gap-2 text-sm">
-											<Input
-												type="text"
-												className="!bg-transparent h-8 w-fit max-w-[160px] border-none text-sm focus-visible:ring-0 focus-visible:ring-offset-0"
-												placeholder="Equipment Name"
-												autoFocus
-												value={templateName}
-												onChange={(e) => setTemplateName(e.target.value)}
-											/>
-											<Select
-												value={templateUnitType}
-												onValueChange={(value) =>
-													setTemplateUnitType(value as "UNIT" | "ML")
-												}
-											>
-												<SelectTrigger className="h-8 w-24 text-xs">
-													<SelectValue placeholder="Unit" />
-												</SelectTrigger>
-												<SelectContent>
-													<SelectItem value="UNIT">Qty</SelectItem>
-													<SelectItem value="ML">mL</SelectItem>
-												</SelectContent>
-											</Select>
-											<div className="flex h-8 items-center gap-2 rounded-md border border-border/60 px-2 py-1">
-												<button
-													type="button"
-													className={`px-1 text-xs ${templateTotal === 1 ? "opacity-50" : ""}`}
-													onClick={() =>
-														setTemplateTotal((q) => (q > 1 ? q - 1 : 1))
-													}
-												>
-													-
-												</button>
-												<Input
-													type="text"
-													className="!bg-transparent h-7 w-10 border-none text-center text-xs focus-visible:ring-0 focus-visible:ring-offset-0"
-													placeholder="Qty"
-													value={templateTotal}
-													onChange={(e) =>
-														setTemplateTotal(
-															Number.parseInt(e.target.value) > 1
-																? Number.parseInt(e.target.value)
-																: 1,
-														)
-													}
-												/>
-												<button
-													type="button"
-													className="px-1 text-xs"
-													onClick={() => setTemplateTotal((q) => q + 1)}
-												>
-													+
-												</button>
-											</div>
-											<Button
-												className="ml-auto h-8"
-												variant={theme === "dark" ? "default" : "secondary"}
-												onClick={() => addLabEquipment()}
-											>
-												Add
-											</Button>
-											<Button
-												size="icon"
-												variant="ghost"
-												onClick={() => {
-													setTemplateVisible(false);
-													setTemplateName("");
-													setTemplateTotal(1);
-													setTemplateUnitType("UNIT");
-												}}
-											>
-												<X className="h-4 w-4" />
-											</Button>
-										</div>
+							<div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pr-1 custom-scrollbar" onScroll={(e) => {
+					const target = e.target as HTMLDivElement;
+					if (target.scrollTop + target.clientHeight >= target.scrollHeight - 50) {
+					if (!booking && !equipment) setLabEqVisibleCount(p => p + 15);
+					else if (equipment !== null && !booking) setSessionEqVisibleCount(p => p + 15);
+					else if (booking !== null) setBookingEqVisibleCount(p => p + 15);
+					}
+					}}>
+								{isTeacher && !booking && !equipment && labEquipment && labEquipment.length > 0 && (
+									<div className="relative w-full mb-1">
+										<Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+										<Input 
+											placeholder="Search..." 
+											className="w-full pl-8 h-8 text-xs rounded-lg bg-background/40"
+											value={labEquipmentSearch}
+											onChange={(e) => setLabEquipmentSearch(e.target.value)}
+										/>
 									</div>
 								)}
-
-								{isTeacher &&
-									!booking &&
-									!equipment &&
-									(labEquipment ? (
-										labEquipment.map((item, index) => (
-											<div
-												className="w-full rounded-lg border border-border/60 bg-muted/30 p-2 text-foreground"
-												key={item.id}
-											>
-												<div className="flex flex-wrap items-center gap-2 text-sm">
-													<Input
-														type="text"
-														id={item.id}
-														className="!bg-transparent h-8 w-fit max-w-[160px] border-none text-sm focus-visible:ring-0 focus-visible:ring-offset-0"
-														placeholder="Equipment Name"
-														value={displayedLabEquipment[index]?.name ?? ""}
-														onChange={(e) => {
-															const newName = e.target.value;
-															setDisplayedLabEquipment((prev) =>
-																prev.map((eq) =>
-																	eq.id === item.id
-																		? { ...eq, name: newName }
-																		: eq,
-																),
-															);
-															setEditedLabEquipment((prev) => {
-																const existing = prev.find(
-																	(eq) => eq.id === item.id,
-																);
-																if (existing)
-																	return prev.map((eq) =>
-																		eq.id === item.id
-																			? { ...eq, name: newName }
-																			: eq,
-																	);
-																return [
-																	...prev,
-																	{
-																		id: item.id,
-																		name: newName,
-																		total: item.total,
-																		unitType: item.unitType,
-																	},
-																];
-															});
-														}}
-													/>
-													<Select
-														value={
-															displayedLabEquipment[index]?.unitType ??
-															item.unitType
-														}
-														onValueChange={(value) => {
-															const newUnit = value as "UNIT" | "ML";
-															setDisplayedLabEquipment((prev) =>
-																prev.map((eq) =>
-																	eq.id === item.id
-																		? { ...eq, unitType: newUnit }
-																		: eq,
-																),
-															);
-															setEditedLabEquipment((prev) => {
-																const existing = prev.find(
-																	(eq) => eq.id === item.id,
-																);
-																if (existing)
-																	return prev.map((eq) =>
-																		eq.id === item.id
-																			? { ...eq, unitType: newUnit }
-																			: eq,
-																	);
-																return [
-																	...prev,
-																	{
-																		id: item.id,
-																		name: item.name,
-																		total: item.total,
-																		unitType: newUnit,
-																	},
-																];
-															});
-														}}
-													>
-														<SelectTrigger className="h-8 w-24 text-xs">
-															<SelectValue placeholder="Unit" />
-														</SelectTrigger>
-														<SelectContent>
-															<SelectItem value="UNIT">Qty</SelectItem>
-															<SelectItem value="ML">mL</SelectItem>
-														</SelectContent>
-													</Select>
-													<div className="flex h-8 items-center gap-2 rounded-md border border-border/60 px-2 py-1">
-														<button
-															type="button"
-															className={`px-1 text-xs ${displayedLabEquipment[index]?.total === 1 ? "opacity-50" : ""}`}
-															onClick={() => {
-																if (!displayedLabEquipment[index]) return;
-																const newTotal = Math.max(
-																	1,
-																	displayedLabEquipment[index].total - 1,
-																);
-																setDisplayedLabEquipment((prev) =>
-																	prev.map((eq) =>
-																		eq.id === item.id
-																			? { ...eq, total: newTotal }
-																			: eq,
-																	),
-																);
-																setEditedLabEquipment((prev) => {
-																	const existing = prev.find(
-																		(eq) => eq.id === item.id,
-																	);
-																	if (existing)
-																		return prev.map((eq) =>
-																			eq.id === item.id
-																				? { ...eq, total: newTotal }
-																				: eq,
-																		);
-																	return [
-																		...prev,
-																		{
-																			id: item.id,
-																			name: item.name,
-																			total: newTotal,
-																			unitType:
-																				displayedLabEquipment[index]
-																					?.unitType ?? item.unitType,
-																		},
-																	];
-																});
-															}}
-														>
-															-
-														</button>
-														<Input
-															type="text"
-															className="!bg-transparent h-7 w-10 border-none text-center text-xs focus-visible:ring-0 focus-visible:ring-offset-0"
-															placeholder="Qty"
-															value={displayedLabEquipment[index]?.total ?? ""}
-															onChange={(e) => {
-																let newTotal = Number.parseInt(e.target.value);
-																if (e.target.value === "") newTotal = 1;
-																if (newTotal < 1) return;
-																setDisplayedLabEquipment((prev) =>
-																	prev.map((eq) =>
-																		eq.id === item.id
-																			? { ...eq, total: newTotal }
-																			: eq,
-																	),
-																);
-																setEditedLabEquipment((prev) => {
-																	const existing = prev.find(
-																		(eq) => eq.id === item.id,
-																	);
-																	if (existing)
-																		return prev.map((eq) =>
-																			eq.id === item.id
-																				? { ...eq, total: newTotal }
-																				: eq,
-																		);
-																	return [
-																		...prev,
-																		{
-																			id: item.id,
-																			name: item.name,
-																			total: newTotal,
-																			unitType:
-																				displayedLabEquipment[index]
-																					?.unitType ?? item.unitType,
-																		},
-																	];
-																});
-															}}
-														/>
-														<button
-															type="button"
-															className="px-1 text-xs"
-															onClick={() => {
-																if (!displayedLabEquipment[index]) return;
-																const newTotal =
-																	displayedLabEquipment[index].total + 1;
-																setDisplayedLabEquipment((prev) =>
-																	prev.map((eq) =>
-																		eq.id === item.id
-																			? { ...eq, total: newTotal }
-																			: eq,
-																	),
-																);
-																setEditedLabEquipment((prev) => {
-																	const existing = prev.find(
-																		(eq) => eq.id === item.id,
-																	);
-																	if (existing)
-																		return prev.map((eq) =>
-																			eq.id === item.id
-																				? { ...eq, total: newTotal }
-																				: eq,
-																		);
-																	return [
-																		...prev,
-																		{
-																			id: item.id,
-																			name: item.name,
-																			total: newTotal,
-																			unitType:
-																				displayedLabEquipment[index]
-																					?.unitType ?? item.unitType,
-																		},
-																	];
-																});
-															}}
-														>
-															+
-														</button>
-													</div>
-													<div className="whitespace-nowrap text-muted-foreground text-xs">
-														{displayedLabEquipment[index]?.total ?? item.total}{" "}
-														{unitLabel(
-															displayedLabEquipment[index]?.unitType ??
-																item.unitType,
+									{isTeacher && !booking && !equipment && (
+										labEquipment === undefined ? (
+											<div className="text-center py-4 text-muted-foreground text-xs italic">
+												Loading lab inventory...
+											</div>
+										) : filteredLabEquipment.length === 0 ? (
+											<div className="text-center py-4 text-muted-foreground text-xs italic">
+												No matching equipment
+											</div>
+										) : (
+											filteredLabEquipment.map((item) => (
+												<div
+													key={item.id}
+													className="group flex w-full items-center gap-2 rounded-xl border border-border/40 bg-muted/10 px-3 py-2.5 hover:bg-muted/20 transition-colors"
+												>
+													<div className="flex-1 min-w-0">
+														<span className="block truncate text-sm font-medium text-foreground">{item.name}</span>
+														{item.category && (
+															<span className="text-[10px] text-muted-foreground">{item.category}</span>
 														)}
 													</div>
-													<div className="ml-auto flex items-center gap-2">
-														<Button
-															size="icon"
-															variant="ghost"
-															className={`h-8 w-8 ${displayedLabEquipment[index]?.total === item.total && displayedLabEquipment[index]?.name === item.name && displayedLabEquipment[index]?.unitType === item.unitType ? "hidden" : ""}`}
-															onClick={() => {
-																updateLabEquipment(item.id);
-															}}
-														>
-															<Check className="h-4 w-4" />
-														</Button>
-														<Button
-															size="icon"
-															variant="ghost"
-															className={`h-8 w-8 ${displayedLabEquipment[index]?.total === item.total && displayedLabEquipment[index]?.name === item.name && displayedLabEquipment[index]?.unitType === item.unitType ? "" : "hidden"}`}
-															onClick={() =>
-																document.getElementById(item.id)?.focus()
-															}
-														>
-															<PencilIcon className="h-4 w-4" />
-														</Button>
-														<Button
-															size="icon"
-															variant="ghost"
-															className="h-8 w-8"
-															onClick={() => deleteLabEquipment(item.id)}
-														>
-															<Trash2 className="h-4 w-4 text-destructive" />
-														</Button>
-													</div>
+													<span className="shrink-0 text-xs font-medium text-muted-foreground tabular-nums">
+														{item.total} {unitLabel(item.unitType)}
+													</span>
+													<Button
+														size="icon"
+														variant="ghost"
+														className="h-7 w-7 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+														onClick={() =>
+															setLabEditItem({
+																id: item.id,
+																name: item.name,
+																total: item.total,
+																unitType: item.unitType,
+																category: item.category ?? "",
+																casNumber: item.casNumber ?? "",
+																brand: item.brand ?? "",
+																location: item.location ?? "",
+																expirationDate: item.expirationDate
+																	? new Date(item.expirationDate)
+																	: null,
+															})
+														}
+														title="Edit"
+													>
+														<PencilIcon className="h-3.5 w-3.5" />
+													</Button>
+													<AlertDialog>
+														<AlertDialogTrigger asChild>
+															<Button
+																size="icon"
+																variant="ghost"
+																className="h-7 w-7 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive"
+																title="Delete"
+															>
+																<Trash2 className="h-3.5 w-3.5" />
+															</Button>
+														</AlertDialogTrigger>
+														<AlertDialogContent>
+															<AlertDialogHeader>
+																<AlertDialogTitle>Delete {item.name}?</AlertDialogTitle>
+																<AlertDialogDescription>
+																	This will permanently remove this item. Equipment with session history cannot be deleted.
+																</AlertDialogDescription>
+															</AlertDialogHeader>
+															<AlertDialogFooter>
+																<AlertDialogCancel>Cancel</AlertDialogCancel>
+																<AlertDialogAction
+																	onClick={() => deleteLabEquipment(item.id)}
+																	className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+																>
+																	Delete
+																</AlertDialogAction>
+															</AlertDialogFooter>
+														</AlertDialogContent>
+													</AlertDialog>
 												</div>
-											</div>
-										))
-									) : (
-										<div className="text-center text-muted-foreground">
-											No equipment added
-										</div>
-									))}
-
+											))
+										)
+									)}
 								{equipment !== null && isTeacher && (
 									<div className="space-y-4">
 										<div className="rounded-xl border border-border/60 bg-muted/30 p-4">
@@ -1421,60 +1240,98 @@ const Lab = ({
 													Add All
 												</Button>
 											</div>
-											{labEquipment && labEquipment.length > 0 ? (
-												<div className="max-h-56 space-y-2 overflow-y-auto pr-2">
-													{labEquipment
-														.filter(
-															(item) =>
-																!sessionEquipmentDraft.some(
-																	(eq) => eq.id === item.id,
-																),
-														)
-														.map((item) => (
-															<div
-																key={item.id}
-																className="flex items-center justify-between rounded-lg border border-border/20 bg-background/30 p-2 text-sm"
-															>
-																<span className="text-muted-foreground">
-																	{item.name}
-																</span>
-																<div className="flex items-center gap-2">
-																	<span className="mr-2 text-muted-foreground text-xs">
-																		{item.total} {unitLabel(item.unitType)}
-																	</span>
-																	<Button
-																		type="button"
-																		size="icon"
-																		variant="ghost"
-																		className="h-6 w-6"
-																		onClick={() => {
-																			setSessionEquipmentDraft((prev) => [
-																				...prev,
-																				{ ...item, available: 1 },
-																			]);
-																		}}
-																	>
-																		<PlusIcon className="h-3 w-3" />
-																	</Button>
-																</div>
-															</div>
-														))}
-													{labEquipment.filter(
-														(item) =>
-															!sessionEquipmentDraft.some(
-																(eq) => eq.id === item.id,
-															),
-													).length === 0 && (
-														<div className="text-muted-foreground text-sm italic">
-															All lab equipment is already in this session
-														</div>
-													)}
-												</div>
-											) : (
+                                            {labEquipment && labEquipment.length > 0 && (
+                                                <div className="relative w-full mb-3">
+                                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                                                    <Input 
+                                                        placeholder="Search equipment..." 
+                                                        className="w-full pl-8 h-8 text-xs"
+                                                        value={sessionEqSearch}
+                                                        onChange={(e) => setSessionEqSearch(e.target.value)}
+                                                    />
+                                                </div>
+                                            )}
+											{labEquipment === undefined ? (
+												<div className="py-4 text-center text-muted-foreground text-sm italic">Loading lab equipment...</div>
+											) : labEquipment.length === 0 ? (
 												<div className="text-muted-foreground text-sm italic">
 													No lab equipment available to add
 												</div>
-											)}
+											) : filteredSessionLabEquipment.length === 0 ? (
+												<div className="text-muted-foreground text-sm italic">
+													No matching equipment
+												</div>
+											) : (
+												<div className="max-h-56 space-y-2 overflow-y-auto pr-2 custom-scrollbar" onScroll={(e) => {
+	                                                    const target = e.target as HTMLDivElement;
+	                                                    if (target.scrollTop + target.clientHeight >= target.scrollHeight - 20) {
+	                                                        setSessionEqVisibleCount(p => p + 15);
+	                                                    }
+	                                                }}>
+														{filteredSessionLabEquipment.map((item) => {
+																const draftEntry = sessionEquipmentDraft.find((eq) => eq.id === item.id);
+																const allocated = draftEntry?.available ?? 0;
+																const remaining = item.total - allocated;
+															const isAdded = !!draftEntry;
+															return (
+																<div
+																	key={item.id}
+																	className={`flex items-center justify-between rounded-lg border p-3 text-sm transition-colors ${isAdded ? "border-primary/20 bg-primary/5" : "border-border/20 bg-background/30"}`}
+																>
+																	<div className="flex-1 min-w-0">
+																		<span className={`text-sm font-medium ${isAdded ? "text-foreground" : "text-muted-foreground"}`}>
+																			{item.name}
+																		</span>
+																		{isAdded && (
+																			<span className="ml-2 text-[10px] text-primary font-medium">
+																				{allocated} {unitLabel(item.unitType)} allocated
+																			</span>
+																		)}
+																	</div>
+																	<div className="flex items-center gap-2 shrink-0">
+																		<span className="text-xs text-muted-foreground">
+																			{remaining} {unitLabel(item.unitType)} free
+																		</span>
+																		{!isAdded ? (
+																			<Button
+																				type="button"
+																				size="icon"
+																				variant="ghost"
+																				className="h-6 w-6"
+																				disabled={item.total === 0}
+																				onClick={() => {
+																					setSessionEquipmentDraft((prev) => [
+																						...prev,
+																						{ ...item, available: Math.min(1, item.total) },
+																					]);
+																				}}
+																			>
+																				<PlusIcon className="h-3 w-3" />
+																			</Button>
+																		) : (
+																			<Button
+																				type="button"
+																				size="icon"
+																				variant="ghost"
+																				className="h-6 w-6 text-muted-foreground hover:text-destructive"
+																				onClick={() => {
+																					const reserved = reservedById.get(item.id) ?? 0;
+																					if (reserved > 0) {
+																						toast.error("Cannot remove: equipment already reserved by students");
+																						return;
+																					}
+																					setSessionEquipmentDraft((prev) => prev.filter((eq) => eq.id !== item.id));
+																				}}
+																			>
+																				<X className="h-3 w-3" />
+																			</Button>
+																		)}
+																	</div>
+																</div>
+																);
+															})}
+													</div>
+												)}
 										</div>
 
 										<Button
@@ -1500,7 +1357,7 @@ const Lab = ({
 											if (myBooking) {
 												// Unified View/Edit Mode
 												return (
-													<div className="rounded-2xl border border-border/60 bg-muted/30 p-5">
+													<div className="space-y-4">
 														<div className="mb-4 flex items-center justify-between">
 															<div className="flex items-center gap-2 font-semibold text-lg">
 																<span className="h-2 w-2 rounded-full bg-sky-500" />
@@ -1723,9 +1580,26 @@ const Lab = ({
 															<div className="mb-2 font-medium text-muted-foreground text-xs uppercase tracking-wider">
 																Add Equipment
 															</div>
-															<div className="max-h-40 space-y-2 overflow-y-auto pr-2">
+                                                            {displayedSessionEquipment && displayedSessionEquipment.length > 0 && (
+                                                                <div className="relative w-full mb-3">
+                                                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                                                                    <Input 
+                                                                        placeholder="Search equipment..." 
+                                                                        className="w-full pl-8 h-8 text-xs bg-background/50"
+                                                                        value={bookingEqSearch}
+                                                                        onChange={(e) => setBookingEqSearch(e.target.value)}
+                                                                    />
+                                                                </div>
+                                                            )}
+															<div className="max-h-40 space-y-2 overflow-y-auto pr-2 custom-scrollbar" onScroll={(e) => {
+                                                                const target = e.target as HTMLDivElement;
+                                                                if (target.scrollTop + target.clientHeight >= target.scrollHeight - 20) {
+                                                                    setBookingEqVisibleCount(p => p + 15);
+                                                                }
+                                                            }}>
 																{displayedSessionEquipment
-																	.filter((item) => item.available > 0)
+																	.filter((item) => item.available > 0 && item.name.toLowerCase().includes(bookingEqSearch.toLowerCase()))
+                                                                    .slice(0, bookingEqVisibleCount)
 																	.map((item) => (
 																		<div
 																			key={item.id}
@@ -1819,7 +1693,7 @@ const Lab = ({
 									</div>
 								)}
 								{pendingSeat && (
-									<div className="mb-4 rounded-xl border border-blue-500/20 bg-blue-500/10 p-4">
+									<div className="mb-4 rounded-xl border border-border/50 bg-muted/10 p-4">
 										<div className="mb-2 text-center font-medium">
 											Booking Seat: {pendingSeat}
 										</div>
@@ -1983,12 +1857,29 @@ const Lab = ({
 													<div className="mb-2 font-medium text-muted-foreground text-xs uppercase tracking-wider">
 														Available Equipment
 													</div>
+                                                    {displayedSessionEquipment && displayedSessionEquipment.some((item) => item.available > 0) && (
+                                                        <div className="relative w-full mb-3">
+                                                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                                                            <Input 
+                                                                placeholder="Search equipment..." 
+                                                                className="w-full pl-8 h-8 text-xs bg-background/50"
+                                                                value={bookingEqSearch}
+                                                                onChange={(e) => setBookingEqSearch(e.target.value)}
+                                                            />
+                                                        </div>
+                                                    )}
 													{displayedSessionEquipment.some(
-														(item) => item.available > 0,
+														(item) => item.available > 0 && item.name.toLowerCase().includes(bookingEqSearch.toLowerCase()),
 													) ? (
-														<div className="max-h-48 space-y-2 overflow-y-auto">
+														<div className="max-h-48 space-y-2 overflow-y-auto custom-scrollbar" onScroll={(e) => {
+                                                            const target = e.target as HTMLDivElement;
+                                                            if (target.scrollTop + target.clientHeight >= target.scrollHeight - 20) {
+                                                                setBookingEqVisibleCount(p => p + 15);
+                                                            }
+                                                        }}>
 															{displayedSessionEquipment
-																.filter((item) => item.available > 0)
+																.filter((item) => item.available > 0 && item.name.toLowerCase().includes(bookingEqSearch.toLowerCase()))
+                                                                .slice(0, bookingEqVisibleCount)
 																.map((item) => (
 																	<div
 																		className="relative flex w-full select-none items-center justify-between rounded-lg border border-border/40 bg-background/30 p-2 text-center"
@@ -2103,23 +1994,259 @@ const Lab = ({
 									!pendingSeat &&
 									equipment === null &&
 									!isTeacher && (
-										<div className="mb-4 rounded-xl border border-border/40 bg-muted/30 p-4 text-center text-muted-foreground text-sm">
-											Select a seat to book. Equipment options will appear after
-											seat selection.
+										<div className="space-y-3">
+											<div className="rounded-xl border border-border/40 bg-muted/20 p-3 text-center text-muted-foreground text-sm">
+												Select a seat on the grid to begin booking. Equipment selection comes next.
+											</div>
+											{sessionEquipment && sessionEquipment.length > 0 && (
+												<div className="rounded-xl border border-border/30 bg-muted/10 p-3">
+													<div className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Available Equipment</div>
+													<div className="space-y-1.5">
+														{sessionEquipment.map((eq) => {
+															const free = Math.max(eq.available - eq.reserved, 0);
+															return (
+																<div key={eq.equipmentId} className="flex items-center justify-between rounded-lg px-2 py-1.5">
+																	<span className="text-sm text-foreground">{eq.equipment.name}</span>
+																	<span className="text-xs text-muted-foreground tabular-nums">
+																		{free} / {eq.available} {unitLabel(eq.equipment.unitType)} free
+																	</span>
+																</div>
+															);
+														})}
+													</div>
+												</div>
+											)}
 										</div>
 									)}
 							</div>
 						</div>
 					)}
 				</div>
-			</div>
-			<div className="w-full max-w-[1600px] mx-auto px-4 md:px-8 pb-12 mt-4 lg:mt-8">
+			<div className="w-full mt-4 lg:mt-8">
 				<CalendarPicker
 					key={isPhysics ? "physics" : "biology"}
 					lab={isPhysics ? "physics" : "biology"}
 					isTeacher={isTeacher}
 				/>
 			</div>
+
+		{/* Add Lab Equipment Dialog */}
+		<Dialog open={labAddOpen} onOpenChange={(open) => { setLabAddOpen(open); if (!open) resetAddLabTemplate(); }}>
+			<DialogContent className="sm:max-w-lg">
+				<DialogHeader>
+					<DialogTitle>Add Equipment to Lab</DialogTitle>
+				</DialogHeader>
+				<div className="space-y-3 py-2">
+					<div className="space-y-1.5">
+						<label className="text-sm font-medium">Name <span className="text-destructive">*</span></label>
+						<Input
+							autoFocus
+							placeholder="e.g., Sodium Hydroxide"
+							value={templateName}
+							onChange={(e) => setTemplateName(e.target.value)}
+							className="rounded-xl"
+							onKeyDown={(e) => { if (e.key === "Enter" && templateName.trim()) addLabEquipment(); }}
+						/>
+					</div>
+					<div className="grid grid-cols-2 gap-3">
+						<div className="space-y-1.5">
+							<label className="text-sm font-medium">Category</label>
+							<Input
+								list="add-categories"
+								placeholder="e.g., Acid, Base..."
+								value={templateCategory}
+								onChange={(e) => setTemplateCategory(e.target.value)}
+								className="rounded-xl"
+							/>
+							<datalist id="add-categories">
+								{existingCategories.map(cat => <option key={cat} value={cat} />)}
+							</datalist>
+						</div>
+						<div className="space-y-1.5">
+							<label className="text-sm font-medium">Brand</label>
+							<Input
+								list="add-brands"
+								placeholder="e.g., PanReac"
+								value={templateBrand}
+								onChange={(e) => setTemplateBrand(e.target.value)}
+								className="rounded-xl"
+							/>
+							<datalist id="add-brands">
+								{existingBrands.map(b => <option key={b} value={b} />)}
+							</datalist>
+						</div>
+					</div>
+					<div className="grid grid-cols-2 gap-3">
+						<div className="space-y-1.5">
+							<label className="text-sm font-medium">Quantity <span className="text-destructive">*</span></label>
+							<Input
+								type="number"
+								min={0}
+								value={templateTotal}
+								onChange={(e) => setTemplateTotal(Math.max(0, Number.parseInt(e.target.value) || 0))}
+								className="rounded-xl"
+							/>
+						</div>
+						<div className="space-y-1.5">
+							<label className="text-sm font-medium">Unit</label>
+							<Select value={templateUnitType} onValueChange={(v) => setTemplateUnitType(v as EquipmentUnit)}>
+								<SelectTrigger className="rounded-xl">
+									<SelectValue />
+								</SelectTrigger>
+								<SelectContent className="rounded-xl">
+									<SelectItem value="UNIT">Quantity</SelectItem>
+									<SelectItem value="ML">mL</SelectItem>
+									<SelectItem value="G">g</SelectItem>
+									<SelectItem value="MG">mg</SelectItem>
+									<SelectItem value="L">L</SelectItem>
+									<SelectItem value="BOX">Boxes</SelectItem>
+									<SelectItem value="TABLETS">Tablets</SelectItem>
+								</SelectContent>
+							</Select>
+						</div>
+					</div>
+					<div className="grid grid-cols-2 gap-3">
+						<div className="space-y-1.5">
+							<label className="text-sm font-medium">CAS Number</label>
+							<Input
+								placeholder="e.g., 1310-73-2"
+								value={templateCasNumber}
+								onChange={(e) => setTemplateCasNumber(e.target.value)}
+								className="rounded-xl"
+							/>
+						</div>
+						<div className="space-y-1.5">
+							<label className="text-sm font-medium">Expiry Date</label>
+							<Input
+								type="date"
+								value={templateExpiration}
+								onChange={(e) => setTemplateExpiration(e.target.value)}
+								className="rounded-xl"
+							/>
+						</div>
+					</div>
+				</div>
+				<div className="flex gap-2 justify-end pt-2">
+					<Button variant="outline" className="rounded-xl" onClick={() => { setLabAddOpen(false); resetAddLabTemplate(); }}>Cancel</Button>
+					<Button
+						className="rounded-xl"
+						disabled={!templateName.trim() || addLabEquipmentMutation.isPending}
+						onClick={() => addLabEquipment()}
+					>
+						{addLabEquipmentMutation.isPending ? "Adding..." : "Add Item"}
+					</Button>
+				</div>
+			</DialogContent>
+		</Dialog>
+
+		{/* Edit Lab Equipment Dialog */}
+		<Dialog open={!!labEditItem} onOpenChange={(open) => { if (!open) setLabEditItem(null); }}>
+			<DialogContent className="sm:max-w-lg">
+				<DialogHeader>
+					<DialogTitle>Edit Equipment</DialogTitle>
+				</DialogHeader>
+				{labEditItem && (
+					<div className="space-y-3 py-2">
+						<div className="space-y-1.5">
+							<label className="text-sm font-medium">Name <span className="text-destructive">*</span></label>
+							<Input
+								autoFocus
+								value={labEditItem.name}
+								onChange={(e) => setLabEditItem({ ...labEditItem, name: e.target.value })}
+								className="rounded-xl"
+							/>
+						</div>
+						<div className="grid grid-cols-2 gap-3">
+							<div className="space-y-1.5">
+								<label className="text-sm font-medium">Category</label>
+								<Input
+									list="edit-categories"
+									value={labEditItem.category}
+									onChange={(e) => setLabEditItem({ ...labEditItem, category: e.target.value })}
+									className="rounded-xl"
+									placeholder="e.g., Acid, Base..."
+								/>
+								<datalist id="edit-categories">
+									{existingCategories.map(cat => <option key={cat} value={cat} />)}
+								</datalist>
+							</div>
+							<div className="space-y-1.5">
+								<label className="text-sm font-medium">Brand</label>
+								<Input
+									list="edit-brands"
+									value={labEditItem.brand}
+									onChange={(e) => setLabEditItem({ ...labEditItem, brand: e.target.value })}
+									className="rounded-xl"
+									placeholder="e.g., PanReac"
+								/>
+								<datalist id="edit-brands">
+									{existingBrands.map(b => <option key={b} value={b} />)}
+								</datalist>
+							</div>
+						</div>
+						<div className="grid grid-cols-2 gap-3">
+							<div className="space-y-1.5">
+								<label className="text-sm font-medium">Quantity</label>
+								<Input
+									type="number"
+									min={0}
+									value={labEditItem.total}
+									onChange={(e) => setLabEditItem({ ...labEditItem, total: Math.max(0, Number.parseInt(e.target.value) || 0) })}
+									className="rounded-xl"
+								/>
+							</div>
+							<div className="space-y-1.5">
+								<label className="text-sm font-medium">Unit</label>
+								<Select value={labEditItem.unitType} onValueChange={(v) => setLabEditItem({ ...labEditItem, unitType: v as EquipmentUnit })}>
+									<SelectTrigger className="rounded-xl">
+										<SelectValue />
+									</SelectTrigger>
+									<SelectContent className="rounded-xl">
+										<SelectItem value="UNIT">Quantity</SelectItem>
+										<SelectItem value="ML">mL</SelectItem>
+										<SelectItem value="G">g</SelectItem>
+										<SelectItem value="MG">mg</SelectItem>
+										<SelectItem value="L">L</SelectItem>
+										<SelectItem value="BOX">Boxes</SelectItem>
+										<SelectItem value="TABLETS">Tablets</SelectItem>
+									</SelectContent>
+								</Select>
+							</div>
+						</div>
+						<div className="grid grid-cols-2 gap-3">
+							<div className="space-y-1.5">
+								<label className="text-sm font-medium">CAS Number</label>
+								<Input
+									value={labEditItem.casNumber}
+									onChange={(e) => setLabEditItem({ ...labEditItem, casNumber: e.target.value })}
+									className="rounded-xl"
+									placeholder="e.g., 1310-73-2"
+								/>
+							</div>
+							<div className="space-y-1.5">
+								<label className="text-sm font-medium">Expiry Date</label>
+								<Input
+									type="date"
+									value={labEditItem.expirationDate ? labEditItem.expirationDate.toISOString().split('T')[0] : ""}
+									onChange={(e) => setLabEditItem({ ...labEditItem, expirationDate: e.target.value ? new Date(e.target.value) : null })}
+									className="rounded-xl"
+								/>
+							</div>
+						</div>
+					</div>
+				)}
+				<div className="flex gap-2 justify-end pt-2">
+					<Button variant="outline" className="rounded-xl" onClick={() => setLabEditItem(null)}>Cancel</Button>
+					<Button
+						className="rounded-xl"
+						disabled={!labEditItem?.name.trim() || updateLabEquipmentMutation.isPending}
+						onClick={handleEditLabEquipmentSave}
+					>
+						{updateLabEquipmentMutation.isPending ? "Saving..." : "Save Changes"}
+					</Button>
+				</div>
+			</DialogContent>
+		</Dialog>
 		</div>
 	);
 };

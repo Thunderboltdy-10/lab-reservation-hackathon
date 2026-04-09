@@ -1,0 +1,121 @@
+potass Goma Xantana 200g Bio Lab
+Bio YPD Agar 500g 2029-07-30 CondaLab Bio Lab
+Bio Sodium Alginate 150g Bio Lab
+Bio Lugol solution AGR n/a 240ml 2026-07-09 Bio Lab
+General Organic Agar Agar box negro n/a 300g Chem Lab
+Bio Benedict's reagent n/a 200ml n/a Sigma aldrich Bio Lab
+Bio European Bacteriological Agar n/a 100g 2028-04-01 CondaLab Bio Lab
+Bio Glucose -H n/a 400g 2027-02-28 Farmaquimica Sur Bio Lab
+Bio Amylase n/a 100g (x2) Bio Lab
+Bio D-Maltose monohydrate 6363-53-7 70g 2030-01-01 SRS Bio Lab
+Bio Ultra Lactase n/a 50g Bio Lab
+Bio Lysine tablets n/a 50g Bio Lab
+Bio Lactose n/a 2000g n/a laguilhoet Bio Lab
+Bio Pectinase n/a 100g n/a Bio Lab
+Bio Betaine and Pepsine n/a 120g n/a Bio Lab
+Bio Fructose n/a 1500g 2026-12-01 Bio Lab
+Bio Biuret reagent n/a 500ml n/a Labkem Bio Lab
+Corrosive Solid Silver Nitrate n/a 50g Alquera Chem Lab
+Corrosive Solid Sodium Hydroxide pellets 1310-73-2 1000g 2027-09-01 PanReac Chem Lab
+Corrosive Solid Potassium hydroxide 1310-58-3 1000g Honeywell Fluka Chem Lab
+Corrosive Water Iron (III)Chloride 6-hydrate 10025-77-1 500g 2026-06-26 PanReac Chem Lab
+Corrosive Water Zinc Chloride 7646-85-7 250g Alfa Aesar Chem Lab
+Flammable Water/Liquids Universal indicator 100ml PanReac Chem Lab
+Flammable Water/Liquids Zinc powder 7440-66-6 500g n/a thermo scientific Chem Lab
+Flammable Water/Liquids magnesium Ribbon 7439-95-4 80g labkem Chem Lab
+General Inorganic Potassium Hydrogen Phthalate pure 877-24-7 400g 2028-01-01 PanReac Chem Lab
+General Inorganic Sodium Acetate 3-hydrate 6131-90-4 1000g 2029-09-01 Panreac Chem Lab
+General Inorganic Calcium Chloride 2-hydrate 10035-04-8 300g 2027-07-01 Panreac Chem Lab
+General Inorganic Sodium Hydrogen Carbonate 144-55-8 1000g 2028-07-01 PanReac Chem Lab
+General Inorganic Potassium Iodide 7681-11-0 250g 2022-10-06 Honeywell Fluka Chem Lab
+General Inorganic Sodium Citrate dihydrate 6132 04 3 1000g 2027-11-16 Sigma Aldrich Chem Lab
+General Inorganic Calcium Chloride anhydrous 10043 52 4 300g 2029-10-01 Scharlau Chem Lab
+General Inorganic Sodium Chloride 7647-14-5 1000g 2027-09-01 PanReac Chem Lab
+General Inorganic Ethylenediaminetetraacetic acid 60-00-4 200g Sigma Aldrich Chem Lab
+General Inorganic Lithium hydroxide 1310-66-3 100g thermoscientific Chem Lab
+General Inorganic Aluminium Chloride hexahydrate 7784-13-6 100g 2021-11-09 Honeywell Chem Lab
+General Inorganic Iron (II) sulfate - 7-hydrate 7782-63-0 1000g 2025-08-01 PanReac Chem Lab
+General Inorganic Manganese(II) Chloride 4- hydrate 13446-34-9 500g 2028-03-01 Panreac
+General Inorganic Sodium bicarbonate n/a 270g Dia Chem lab
+General Inorganic tetraethoxysilan 78-10-4 100ml thermoscientific Chem lab 
+General Inorganic Potassium bromide 7758 02 3 250g thermoscientific Chem lab
+General Inorganic Aluminium Chloride hexahydrate 7784-13-6 100g 2021-11-09 Honeywell Chem lab
+General Inorganic Sodium thiosulfate 5-hydrate 10102-17-7 100g 2029-02-01 Panreac Chem Lab
+General Inorganic Magnessium sulfate anhydrous 7487-88-9 1000g 2029-11-20 labkem Chem Lab
+General Inorganic Calcium Carbonate 471-34-1 1000g 2028-05-01 Panreac Chem lab
+General Inorganic Iron granules 7439-89-6 250g thermoscientific Chem lab
+General Inorganic Copper II sulfate pentahydrate 7758-99-8 1000g 2029-03-31 sigma aldrich Chem lab
+General Inorganic Potassium chloride 7447-40-7 500g 2027-09-01 T3Q Chem lab
+General Inorganic Lithium chloride 7447-41-8 100g thermoscientific Chem lab
+General Inorganic Copper II sulfate pentahydrate 7758-99-8 1000g 2029-03-31 Sigma Aldrich Chem lab
+General Inorganic TFC n/a
+General Inorganic Ammonium Thiocyanate 1762-95-4 800ml 2026-07-01 Panreac Chem lab
+General Inorganic Potassium thyocianate 333-20-0 500 g thermo scientific Chem lab
+General Inorganic Potassium hexacyanoferrate (II) 3 hydrate 14459-95-1 500g 2028-03-01 PanReac Chem Lab
+General Inorganic Magnesium Chloride 6-hydrate 7791-18-6 1000g PanReac Chem Lab
+General Organic Coco - Betaine n/a 120ml 2025-11-01 qerlan Chem Lab
+General Organic Essential Oil, tea tree n/a 10ml 2026-09-01 jabonarium Chem Lab
+General Organic Essential Oil, Mint tree n/a 10 ml 2026-05-01 jabonarium Chem Lab
+General Organic Chocolate Aroma n/a 30 ml 2025-12-01 jabonarium Chem lab
+General Organic Essential Oil, Oregano n/a 10ml 2026-10-01 jabonarium Chem Lab
+General Organic Essential Oil, Limon n/a 10ml 2026-09-01 jabonarium Chem Lab
+General Organic Coco Glucoside n/a 120 ml 2026-01-01 querlan Chem Lab
+General Organic Ricinus oil n/a 20ml 2026-01-01 querlan Chem Lab
+General Organic Essential oil, raspberry n/a 15ml 2026-02-01 querlan Chem Lab
+General Organic Lactic Acid n/a 60ml 2027-06-01 querlan Chem Lab
+General Organic Glicerin n/a 300g 2029-04-01 jabonarium Chem Lab
+General Organic Liquid emulsifier n/a 125ml 2027-12-01 querlan Chem Lab
+General Organic Benzyl Alcohol n/a 30ml 2025-12-01 querlan Chem Lab
+General Organic Tocopherol n/a 30ml 2027-09-01 querlan Chem Lab
+General Organic Jojoba Oil n/a 30ml 2026-06-01 querlan Chem Lab
+General Organic Cinnamon oil n/a 30ml 2026-09-01 jabonarium Chem Lab
+General Organic Glicerin n/a 300g 2026-03-01 Jabonarium Chem Lab
+General Organic Olivem n/a 10g 2026-02-01 jabonarium Chem Lab
+General Organic Cetyl Alcohol n/a 100g 2028-07-01 jabonarium Chem Lab
+General Organic Bee wax n/a 100g 2026-07-01 jabonarium Chem Lab
+General Organic SCS- sodium coco sulfate n/a 100g 2025-12-01 querlan Chem Lab
+General Organic SCI 69-72-7 50g 2026-06-01 querlan Chem Lab
+General Organic Salicylic Acid, powder n/a 300g 2026-06-02 VWR chemicals Chem Lab
+General Organic Vaseline soft technical grade 518-47-8 250g 2027-09-01 PanReac Chem Lab
+General Organic Fluorescine Sodium 87-69-4 100g 2030-01-01 PanReac Chem Lab
+General Organic L(+) - Tartaric Acid 1266615-56-8 1000g 2029-09-01 PanReac Chem Lab
+General Organic 2,6-Dichloroindophenol sodium 548-62-9 5g Chem Lab
+General Organic Crystal Violet 10039-26-6 25g 2026-09-09 Labkem Chem Lab
+General Organic Lactose monohydrate AGR 151-21-3 500g 2028-12-31 Labkem Chem Lab
+General Organic Sodium lauryl sulphate 141-82-2 250g 2027-02-19 Guinama Chem Lab
+General Organic Malonic Acid 100g thermoscientific Chem Lab
+General Organic Tartaric Acid n/a 100g 2025-01-09 Chem Lab
+General Organic Caffeine tablets n/a 97g 2028-06-01 HSN Chem Lab
+General Organic Curcumin n/a 10g thermoscientific Chem Lab
+General Organic Sucrose Cocoate n/a 50g 2027-03-01 Chem Lab
+General Organic Ascorbic aAcid 50-81-7 100g 2028-03-17 Guinama Chem Lab
+General Organic 5-Amino-2,3-dihydrophtalazine-1,4-dione 521-31-3 5g Indagoo Chem Lab
+General Organic Octadecylamine 124-30-1 200g Sigma-Aldrich Chem Lab
+General Organic 2,2-Diphenyl-1-picrythydrazil 1896-66-4 Chem Lab
+General Organic L(+) Ascorbic 50-81-7 1000g 2026-05-01 PanReac Chem Lab
+General Organic Epigallocatechin gallate n/a Thermo scientific Chem Lab
+General Organic Hexadecyltrimethylammonium bromide n/a 10g thermo scientific Chem lab
+General Organic Cocounut Oil n/a 250ml Chem Lab
+General Organic Karite butter n/a 50g Chem Lab
+Others Povidona Iodada 10% Chem Lab
+Others Methylene Blue 61-73-4 50g 2025-05-01 PanReac Chem Lab
+Others Brillant Blue Alquera Chem Lab
+Others Phenolphtalein 50g Panreac Chem Lab
+Others Acetocarmine Solution N/a 500ml Chem Lab
+Others Buffer solution ph7 n/a 350ml n/a Fisher Chemical Chem Lab
+Others Buffer solution ph9 n/a 100ml n/a PanReac Chem Lab
+Others Methyl Red 493-52-7 100g 2028-05-01 PanReac Chem Lab
+Oxidising Agent Sodium Nitrate 7631-99-4 1000g 2029-01-01 Panreac Chem Lab
+Oxidising Agent Potassium Chlorate 3811 04 9 1000g thermo scientific Chem Lab
+Oxidising Agent Calcium Nitrate 4-hydrate 13477-34-4 1000g PanReac Chem Lab
+Oxidising Agent Potassium Permanganate 7722-64-7 500g PanReac Chem Lab
+Oxidising Agent Potassium Iodate 100g PanReac Chem Lab
+Oxidising Agent Iron (III) Nitrate 9-hydrate 7782-61-8 1000g PanReac Chem Lab
+Oxidising Agent Potassium Nitrate 800g Chem Lab
+Toxic Inorganic Sodium Carbonate n/a 1000g 2026-07-05 Farmaquimica Sur Chem Lab
+Toxic Inorganic Cobalt (II) Chloride 6-hydrate 7791-13-1 Pan Reac Chem Lab
+Toxic Inorganic Potassium dichromate 500g Chem Lab
+Toxic Inorganic Potassium Chromate 500g thermoscientific Chem Lab
+Toxic Inorganic Phenol Crystalline 108-95-2 250g PanREac Chem Lab
+Toxic Inorganic Arsenic 2027-08-22 Chem Lab
+Toxic Inorganic Lead (IV) oxide 1314-41-6 1000g Chem Lab

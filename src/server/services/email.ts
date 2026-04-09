@@ -537,3 +537,92 @@ export const getSessionsNeedingReminders = async () => {
 		teacherReminders: sessionsForTeacherReminders,
 	};
 };
+
+// Send usage report request email to a student after a session ends
+export const sendUsageReportRequestEmail = async (
+	studentEmail: string,
+	studentName: string,
+	sessionDetails: {
+		labName: string;
+		startAt: Date;
+		endAt: Date;
+		equipmentItems: { name: string; amount: number }[];
+	},
+) => {
+	const equipmentList = sessionDetails.equipmentItems
+		.map((e) => `<li>${escapeHtml(e.name)} — booked: ${e.amount}</li>`)
+		.join("");
+
+	const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <style>
+        body { font-family: 'Montserrat', Arial, sans-serif; line-height: 1.6; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background: #003087; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
+        .content { background: #f9f9f9; padding: 20px; border-radius: 0 0 8px 8px; }
+        .highlight { background: #B3DC3C; padding: 2px 8px; border-radius: 4px; font-weight: bold; }
+        .details { background: white; padding: 15px; border-radius: 8px; margin: 15px 0; }
+        .btn { display: inline-block; background: #003087; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: bold; margin-top: 10px; }
+        .footer { text-align: center; margin-top: 20px; color: #666; font-size: 12px; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header"><h1>Equipment Usage Report Required</h1></div>
+        <div class="content">
+          <p>Hi ${escapeHtml(studentName)},</p>
+          <p>Your session in <span class="highlight">${escapeHtml(sessionDetails.labName)}</span> on ${formatDate(sessionDetails.startAt)} has ended. Please report your actual equipment usage as soon as possible.</p>
+          <div class="details">
+            <h3>Equipment You Reserved</h3>
+            <ul>${equipmentList}</ul>
+          </div>
+          <p>Log into the lab reservation system to submit your usage report:</p>
+          <a href="${process.env.NEXTAUTH_URL ?? "https://your-app.vercel.app"}/dashboard" class="btn">Submit Usage Report</a>
+          <div class="footer"><p>The Global College Lab Reservation System</p></div>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+	return sendEmail({
+		to: studentEmail,
+		subject: `Usage Report Required: ${sessionDetails.labName} — ${formatDate(sessionDetails.startAt)}`,
+		html,
+	});
+};
+
+// Get recently ended sessions where students have unreported equipment usage
+export const getSessionsNeedingUsageReports = async () => {
+	const now = new Date();
+	// Sessions that ended between 30 minutes and 24 hours ago
+	const windowStart = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+	const windowEnd = new Date(now.getTime() - 30 * 60 * 1000);
+
+	return await db.equipmentBooking.findMany({
+		where: {
+			actualUsed: null,
+			reportedAt: null,
+			session: {
+				endAt: {
+					gte: windowStart,
+					lte: windowEnd,
+				},
+			},
+		},
+		include: {
+			user: { select: { email: true, firstName: true, lastName: true, id: true } },
+			equipment: { select: { name: true } },
+			session: {
+				select: {
+					id: true,
+					startAt: true,
+					endAt: true,
+					lab: { select: { name: true } },
+				},
+			},
+		},
+	});
+};
