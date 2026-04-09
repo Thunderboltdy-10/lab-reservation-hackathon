@@ -297,24 +297,31 @@ const CalendarPicker = ({
 	const controlsLocked = booking !== null || equipment !== null;
 
 	return (
-		<div className="flex h-full justify-center gap-20 p-10">
-			<Calendar mode="single" selected={date} onSelect={setDate} />
-			<div className="flex flex-col items-center gap-4">
-				<div className="font-semibold text-lg">
+		<div className="flex flex-col lg:flex-row h-full justify-center gap-8 lg:gap-24 p-6 lg:p-12 rounded-[2rem] border border-border/50 bg-card/40 shadow-sm">
+			<div className="flex justify-center lg:block">
+				<Calendar 
+					mode="single" 
+					selected={date} 
+					onSelect={setDate} 
+					className="rounded-2xl border border-border/50 bg-background/50 scale-[1.15] md:scale-125 transform-gpu shadow-sm origin-top lg:origin-top-right mt-4"
+				/>
+			</div>
+			<div className="flex flex-1 flex-col items-center lg:items-start gap-4 max-w-2xl">
+				<div className="font-bold text-2xl md:text-3xl tracking-tight">
 					<span>
 						{date ? formatDateInSchoolTZ(date, "EEEE, MMMM d, yyyy") : ""}
 					</span>
 				</div>
 				{/* Timezone indicator */}
-				<div className="flex items-center gap-1 text-muted-foreground text-xs">
-					<Clock className="h-3 w-3" />
+				<div className="flex items-center gap-1.5 text-muted-foreground text-sm font-medium uppercase tracking-wider mb-2">
+					<Clock className="h-4 w-4" />
 					<span>Times shown in {SCHOOL_TIMEZONE}</span>
 				</div>
-				<div className="flex max-h-full w-84 flex-col gap-3 overflow-y-auto rounded-lg border bg-card p-4">
+				<div className="flex max-h-full w-full lg:min-w-[450px] flex-col gap-4 overflow-y-auto rounded-[1.5rem] border border-border/50 bg-card/60 p-6 shadow-sm">
 					<div
-						className={`flex items-center ${isTeacher === true ? "justify-between" : "justify-center"}`}
+						className={`flex items-center pb-2 ${isTeacher === true ? "justify-between" : "justify-center"}`}
 					>
-						<div className="font-semibold text-foreground text-xl">
+						<div className="font-bold text-foreground text-2xl tracking-tight">
 							Sessions
 						</div>
 						{isTeacher === true && (

@@ -681,20 +681,28 @@ const Lab = ({
 		pendingSeat !== null;
 	const labPanelClass = showEquipmentPanel
 		? isEquipmentFocus
-			? "basis-[56%]"
-			: "basis-[60%]"
-		: "basis-full";
-	const equipmentPanelClass = isEquipmentFocus ? "basis-[44%]" : "basis-[40%]";
+			? "w-full lg:basis-[56%]"
+			: "w-full lg:basis-[60%]"
+		: "w-full lg:basis-full";
+	const equipmentPanelClass = isEquipmentFocus ? "w-full lg:basis-[44%]" : "w-full lg:basis-[40%]";
 
 	return (
-		<div className="flex h-screen flex-col overflow-hidden">
-			<div className="flex-none px-4 pt-4 pb-2">
-				<h1 className="mb-4 flex items-center justify-center font-semibold text-3xl">
-					{isPhysics ? "Physics/Chemistry Lab" : "Biology Lab"}
-				</h1>
-				<div className="mx-auto flex w-full max-w-[1480px] items-start gap-6 transition-all duration-500 ease-spring">
+		<div className="flex min-h-screen flex-col bg-background/50 pb-12">
+			<div className="flex-none px-4 pt-8 md:px-8 md:pt-12 pb-8">
+				<div className="mb-10 text-center">
+					<div className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-4 py-1.5 mb-4">
+						<span className="text-sm font-medium text-primary">Lab Environment</span>
+					</div>
+					<h1 className="flex items-center justify-center font-bold text-4xl md:text-5xl tracking-tight text-foreground">
+						{isPhysics ? "Physics & Chemistry Facility" : "Biology & Life Sciences"}
+					</h1>
+					<p className="mt-4 text-muted-foreground max-w-xl mx-auto">
+						Manage seat reservations and equipment requests for upcoming sessions.
+					</p>
+				</div>
+				<div className="mx-auto flex flex-col lg:flex-row w-full max-w-[1600px] items-stretch gap-8 transition-all duration-500 ease-spring">
 					<div
-						className={`relative flex ${labPanelClass} flex-col items-center justify-start rounded-2xl border bg-gradient-to-br from-card via-card to-muted/30 p-5 shadow-sm transition-[flex-basis] duration-500 ease-in-out ${activeSessionId !== null ? "border-transparent outline-blue" : "border-border/60"}`}
+						className={`relative flex ${labPanelClass} flex-col items-center justify-center rounded-[2rem] border bg-gradient-to-br from-card/80 via-card/50 to-muted/30 p-8 shadow-sm transition-[flex-basis] duration-500 ease-in-out ${activeSessionId !== null ? "border-transparent outline-blue shadow-lg" : "border-border/50"}`}
 					>
 						{isLate && !isTeacher && booking && (
 							<div className="-translate-x-1/2 fade-in slide-in-from-top-4 absolute top-4 left-1/2 z-10 flex animate-in items-center gap-2 rounded-full border border-destructive/20 bg-destructive/10 px-4 py-2 font-medium text-destructive text-sm">
@@ -865,7 +873,7 @@ const Lab = ({
 					</div>
 					{showEquipmentPanel && (
 						<div
-							className={`flex ${equipmentPanelClass} relative flex-col gap-4 rounded-2xl border border-border/60 bg-card/80 p-4 shadow-sm transition-[flex-basis] duration-500 ease-in-out ${booking !== null || equipment !== null ? "outline-blue" : ""} max-h-[56vh]`}
+							className={`flex ${equipmentPanelClass} relative flex-col gap-6 rounded-[2rem] border border-border/50 bg-card/60 p-6 md:p-8 shadow-sm transition-[flex-basis] duration-500 ease-in-out ${booking !== null || equipment !== null ? "outline-blue shadow-lg" : ""} max-h-[60vh] lg:max-h-none`}
 						>
 							<div
 								className={`flex items-center ${booking === null && equipment === null ? "justify-between" : "justify-center"}`}
@@ -2095,7 +2103,7 @@ const Lab = ({
 									!pendingSeat &&
 									equipment === null &&
 									!isTeacher && (
-										<div className="mb-4 rounded-lg border border-border/40 bg-muted/30 p-3 text-center text-muted-foreground text-sm">
+										<div className="mb-4 rounded-xl border border-border/40 bg-muted/30 p-4 text-center text-muted-foreground text-sm">
 											Select a seat to book. Equipment options will appear after
 											seat selection.
 										</div>
@@ -2105,7 +2113,7 @@ const Lab = ({
 					)}
 				</div>
 			</div>
-			<div className="min-h-0 flex-1 px-4 pb-4">
+			<div className="w-full max-w-[1600px] mx-auto px-4 md:px-8 pb-12 mt-4 lg:mt-8">
 				<CalendarPicker
 					key={isPhysics ? "physics" : "biology"}
 					lab={isPhysics ? "physics" : "biology"}
