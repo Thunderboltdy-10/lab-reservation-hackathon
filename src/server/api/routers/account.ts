@@ -2427,7 +2427,7 @@ export const accountRouter = createTRPCRouter({
 				total: z.number().int().nonnegative(),
 				expirationDate: z.date().optional(),
 				unitType: z.enum(["UNIT", "ML", "G", "MG", "L", "BOX", "TABLETS"]),
-				category: z.string().optional(),
+				categoryId: z.string().optional(),
 				casNumber: z.string().optional(),
 				brand: z.string().optional(),
 				location: z.string().optional(),
@@ -2442,7 +2442,7 @@ export const accountRouter = createTRPCRouter({
 					total: input.total,
 					unitType: input.unitType,
 					expirationDate: input.expirationDate,
-					category: input.category,
+					categoryId: input.categoryId,
 					casNumber: input.casNumber,
 					brand: input.brand,
 					location: input.location,
@@ -2470,7 +2470,7 @@ export const accountRouter = createTRPCRouter({
 					unitType: true,
 					expirationDate: true,
 					createdBy: true,
-					category: true,
+					category: { select: { id: true, name: true } },
 					casNumber: true,
 					brand: true,
 					location: true,
@@ -2478,7 +2478,7 @@ export const accountRouter = createTRPCRouter({
 					lab: { select: { name: true } },
 				},
 				orderBy: {
-					category: "asc",
+					name: "asc",
 				},
 			});
 		}),
@@ -2545,7 +2545,7 @@ export const accountRouter = createTRPCRouter({
 				total: z.number().int().nonnegative().optional(),
 				unitType: z.enum(["UNIT", "ML", "G", "MG", "L", "BOX", "TABLETS"]).optional(),
 				expirationDate: z.date().nullish(),
-				category: z.string().optional(),
+				categoryId: z.string().optional(),
 				casNumber: z.string().optional(),
 				brand: z.string().optional(),
 				location: z.string().optional(),
@@ -2560,7 +2560,7 @@ export const accountRouter = createTRPCRouter({
 					total: input.total,
 					unitType: input.unitType,
 					expirationDate: input.expirationDate,
-					category: input.category,
+					categoryId: input.categoryId,
 					casNumber: input.casNumber,
 					brand: input.brand,
 					location: input.location,
@@ -2968,5 +2968,94 @@ export const accountRouter = createTRPCRouter({
 					{ equipment: { name: "asc" } },
 				],
 			});
+		}),
+
+	getEquipmentCategories: privateProcedure
+		.query(async ({ ctx }) => {
+			const categories = await ctx.db.equipmentCategory.findMany({
+				orderBy: { name: "asc" },
+			});
+			
+			// Get equipment counts for each category
+			const categoriesWithCounts = await Promise.all(
+				categories.map(async (cat) => {
+					const count = await ctx.db.equipment.count({
+						where: { categoryId: cat.id },
+					});
+					return { ...cat, equipmentCount: count };
+				})
+			);
+			
+			return categoriesWithCounts;
+		}),
+
+	createEquipmentCategory: teacherProcedure
+		.input(z.object({ name: z.string().min(1) }))
+		.mutation(async ({ ctx, input }) => {
+			const existing = await ctx.db.equipmentCategory.findUnique({
+				where: { name: input.name },
+			});
+			if (existing) return { ...existing, equipmentCount: 0 };
+			const created = await ctx.db.equipmentCategory.create({
+				data: { name: input.name },
+			});
+			return { ...created, equipmentCount: 0 };
+		}),
+
+	deleteEquipmentCategory: teacherProcedure
+		.input(z.object({ id: z.string() }))
+		.mutation(async ({ ctx, input }) => {
+			await ctx.db.equipment.updateMany({
+				where: { categoryId: input.id },
+				data: { categoryId: null },
+			});
+			return await ctx.db.equipmentCategory.delete({
+				where: { id: input.id },
+			});
+		}),
+
+	getEquipmentBrands: privateProcedure
+		.query(async ({ ctx }) => {
+			const equipment = await ctx.db.equipment.findMany({
+				select: { brand: true, id: true },
+				where: { brand: { not: null } },
+			});
+			
+			// Count equipment per brand
+			const brandCounts = new Map<string, number>();
+			equipment.forEach((e) => {
+				if (e.brand) {
+					brandCounts.set(e.brand, (brandCounts.get(e.brand) || 0) + 1);
+				}
+			});
+			
+			const brands = [...brandCounts.keys()].sort();
+			return brands.map((name) => ({ 
+				name, 
+				id: Buffer.from(name).toString("base64"), // Generate a pseudo-id for consistency
+				equipmentCount: brandCounts.get(name) || 0 
+			}));
+		}),
+
+	createEquipmentBrand: teacherProcedure
+		.input(z.object({ name: z.string().min(1) }))
+		.mutation(async ({ ctx, input }) => {
+			// Check if brand already exists in equipment
+			const existingEquipment = await ctx.db.equipment.findFirst({
+				where: { brand: input.name },
+			});
+			return { 
+				name: input.name, 
+				id: Buffer.from(input.name).toString("base64"),
+				equipmentCount: 0 
+			};
+		}),
+
+	deleteEquipmentBrand: teacherProcedure
+		.input(z.object({ name: z.string() }))
+		.mutation(async ({ ctx, input }) => {
+			// Just return success - we don't actually delete brands since they're freeform strings
+			// Equipment will just lose their brand reference
+			return { name: input.name, success: true };
 		}),
 });

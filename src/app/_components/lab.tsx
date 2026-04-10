@@ -42,6 +42,7 @@ import {
 	X,
     Search,
 } from "lucide-react";
+import { CreatableCombobox } from "@/components/ui/creatable-combobox";
 import { useTheme } from "next-themes";
 import type React from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -117,6 +118,7 @@ const Lab = ({
 	const [notes, setNotes] = useState("");
 	const [selectedSeat, setSelectedSeat] = useState<string | null>(null);
 	const [pendingSeat, setPendingSeat] = useState<string | null>(null);
+	const [leftPanelWidth, setLeftPanelWidth] = useState(60);
 	// Removed isEditing - unification of view/edit modes
 
 	// Smart Save State
@@ -147,6 +149,40 @@ const Lab = ({
 		api.account.updateSessionEquipment.useMutation();
 	const updateBookingDetailsMutation =
 		api.account.updateBookingDetails.useMutation();
+
+    const { data: categories, refetch: refetchCategories } = api.account.getEquipmentCategories.useQuery();
+    const { data: brandOptions, refetch: refetchBrands } = api.account.getEquipmentBrands.useQuery();
+    const createCategoryMutation = api.account.createEquipmentCategory.useMutation({
+        onSuccess: () => {
+            toast.success("Category created");
+            refetchCategories();
+            refetchLabEquipment();
+        },
+    });
+    const deleteCategoryMutation = api.account.deleteEquipmentCategory.useMutation({
+        onSuccess: () => {
+            toast.success("Category deleted");
+            refetchCategories();
+            refetchLabEquipment();
+        },
+    });
+    const createBrandMutation = api.account.createEquipmentBrand.useMutation({
+        onSuccess: () => {
+            toast.success("Brand created");
+            refetchBrands();
+        },
+    });
+    const deleteBrandMutation = api.account.deleteEquipmentBrand.useMutation({
+        onSuccess: () => {
+            toast.success("Brand deleted");
+            refetchBrands();
+            refetchLabEquipment();
+        },
+    });
+    const [isCreatingCategory, setIsCreatingCategory] = useState(false);
+    const [isCreatingBrand, setIsCreatingBrand] = useState(false);
+    const [categoryToDelete, setCategoryToDelete] = useState<{id: string, name: string, equipmentCount?: number} | null>(null);
+    const [brandToDelete, setBrandToDelete] = useState<{name: string, equipmentCount?: number} | null>(null);
 
 	const config = useMemo(
 		() => parseLabConfig(labData?.defaultRowConfig),
@@ -353,7 +389,7 @@ const Lab = ({
 				labId: labData.id,
 				total: templateTotal,
 				unitType: templateUnitType,
-				category: templateCategory.trim() || undefined,
+				categoryId: templateCategory || undefined,
 				brand: templateBrand.trim() || undefined,
 				casNumber: templateCasNumber.trim() || undefined,
 				location: templateLocation.trim() || undefined,
@@ -409,7 +445,7 @@ const Lab = ({
 				name: labEditItem.name,
 				total: labEditItem.total,
 				unitType: labEditItem.unitType,
-				category: labEditItem.category.trim() || undefined,
+				categoryId: categories?.find(c => c.name === labEditItem.category)?.id || undefined,
 				brand: labEditItem.brand.trim() || undefined,
 				casNumber: labEditItem.casNumber.trim() || undefined,
 				location: labEditItem.location.trim() || undefined,
@@ -701,7 +737,7 @@ const Lab = ({
 
 	const existingCategories = useMemo(() => {
 		if (!labEquipment) return [];
-		return Array.from(new Set(labEquipment.map(e => e.category).filter(Boolean))).sort() as string[];
+		return Array.from(new Set(labEquipment.map(e => e.category?.name || 'General').filter(Boolean))).sort() as string[];
 	}, [labEquipment]);
 
 	const existingBrands = useMemo(() => {
@@ -739,27 +775,29 @@ const Lab = ({
 		equipment !== null ||
 		labAddOpen ||
 		pendingSeat !== null;
-	const labPanelClass = showEquipmentPanel
-		? isEquipmentFocus
-			? "w-full lg:basis-[56%]"
-			: "w-full lg:basis-[60%]"
-		: "w-full lg:basis-full";
-	const equipmentPanelClass = isEquipmentFocus ? "w-full lg:basis-[44%]" : "w-full lg:basis-[40%]";
+
+	// Equipment panel should shrink FIRST, blueprint should maintain minimum width
+	const blueprintMinWidth = "520px";
 
 	return (
-		<div className="container mx-auto w-full max-w-[1600px] p-6 pb-12">
-			<div className="mb-8">
-				<h1 className="font-semibold text-3xl">
-					{isPhysics ? "Physics & Chemistry Facility" : "Biology & Life Sciences"}
+		<div className="container mx-auto w-full max-w-[1600px] p-4 md:p-6 pb-12">
+			<div className="mb-6 md:mb-8">
+				<h1 className="font-semibold text-2xl md:text-3xl">
+					{isPhysics ? "Physics & Chemistry Lab" : "Biology & Life Sciences Lab"}
 				</h1>
-				<p className="mt-1 text-muted-foreground">
+				<p className="mt-1 text-muted-foreground text-sm md:text-base">
 					Manage seat reservations and equipment requests for upcoming sessions.
 				</p>
 			</div>
-			<div className="mx-auto flex flex-col lg:flex-row w-full items-stretch gap-8 transition-all duration-500 ease-spring">
-					<div
-						className={`relative flex ${labPanelClass} flex-col items-center justify-center rounded-[2rem] border bg-gradient-to-br from-card/80 via-card/50 to-muted/30 p-8 shadow-sm transition-[flex-basis] duration-500 ease-in-out ${booking !== null ? "border-transparent outline-blue shadow-lg" : "border-border/50"}`}
-					>
+			<div className={`flex flex-col lg:flex-row w-full items-stretch gap-4 lg:gap-8 transition-all duration-500`}>
+				{/* Blueprint / Seat Grid Panel - gets 2x share, minimum width */}
+				<div
+					className={`relative flex flex-col items-center justify-center rounded-[2rem] border bg-gradient-to-br from-card/80 via-card/50 to-muted/30 p-4 md:p-6 md:py-8 shadow-sm transition-all duration-500 ease-in-out ${booking !== null ? "border-transparent outline-blue shadow-lg" : "border-border/50"}`}
+					style={{
+						minWidth: showEquipmentPanel ? blueprintMinWidth : "100%",
+						flex: showEquipmentPanel ? "2 1 520px" : "1 1 100%",
+					}}
+				>
 						{isLate && !isTeacher && booking && (
 							<div className="-translate-x-1/2 fade-in slide-in-from-top-4 absolute top-4 left-1/2 z-10 flex animate-in items-center gap-2 rounded-full border border-destructive/20 bg-destructive/10 px-4 py-2 font-medium text-destructive text-sm">
 								<span className="h-2 w-2 animate-pulse rounded-full bg-destructive" />
@@ -929,7 +967,8 @@ const Lab = ({
 					</div>
 					{showEquipmentPanel && (
 						<div
-							className={`flex ${equipmentPanelClass} relative flex-col gap-4 rounded-[2rem] border bg-card/60 p-5 md:p-6 shadow-sm transition-[flex-basis] duration-500 ease-in-out ${equipment !== null ? "border-transparent outline-green shadow-lg" : booking !== null ? "border-transparent outline-blue shadow-lg" : "border-border/50"} h-[500px] max-h-[70vh] lg:max-h-[600px]`}
+							className={`flex relative flex-col gap-3 md:gap-4 rounded-[2rem] border bg-card/60 p-4 md:p-6 shadow-sm transition-all duration-500 ease-in-out ${equipment !== null ? "border-transparent outline-green shadow-lg" : booking !== null ? "border-transparent outline-blue shadow-lg" : "border-border/50"} max-h-[500px] md:max-h-[70vh] lg:max-h-[600px]`}
+							style={{ flex: "1 1 300px", minWidth: "280px" }}
 						>
 							<div
 								className={`flex items-center ${booking === null && equipment === null ? "justify-between" : "justify-center"}`}
@@ -994,7 +1033,7 @@ const Lab = ({
 													<div className="flex-1 min-w-0">
 														<span className="block truncate text-sm font-medium text-foreground">{item.name}</span>
 														{item.category && (
-															<span className="text-[10px] text-muted-foreground">{item.category}</span>
+															<span className="text-[10px] text-muted-foreground">{item.category?.name}</span>
 														)}
 													</div>
 													<span className="shrink-0 text-xs font-medium text-muted-foreground tabular-nums">
@@ -1010,7 +1049,7 @@ const Lab = ({
 																name: item.name,
 																total: item.total,
 																unitType: item.unitType,
-																category: item.category ?? "",
+																category: item.category?.name ?? "",
 																casNumber: item.casNumber ?? "",
 																brand: item.brand ?? "",
 																location: item.location ?? "",
@@ -2051,29 +2090,45 @@ const Lab = ({
 					<div className="grid grid-cols-2 gap-3">
 						<div className="space-y-1.5">
 							<label className="text-sm font-medium">Category</label>
-							<Input
-								list="add-categories"
-								placeholder="e.g., Acid, Base..."
+							<CreatableCombobox
+								options={categories?.map(c => ({ value: c.id, label: c.name, equipmentCount: c.equipmentCount })) || []}
 								value={templateCategory}
-								onChange={(e) => setTemplateCategory(e.target.value)}
-								className="rounded-xl"
+								onChange={(val) => setTemplateCategory(val)}
+								onCreateOption={(val) => {
+									setIsCreatingCategory(true);
+									createCategoryMutation.mutate({ name: val }, {
+										onSettled: () => setIsCreatingCategory(false),
+										onSuccess: (data) => setTemplateCategory(data.id)
+									});
+								}}
+								onDeleteOption={(val, name, count) => {
+									setCategoryToDelete({ id: val, name, equipmentCount: count });
+								}}
+								placeholder="Select category..."
+								emptyText="No categories found."
+								isCreating={isCreatingCategory}
 							/>
-							<datalist id="add-categories">
-								{existingCategories.map(cat => <option key={cat} value={cat} />)}
-							</datalist>
 						</div>
 						<div className="space-y-1.5">
 							<label className="text-sm font-medium">Brand</label>
-							<Input
-								list="add-brands"
-								placeholder="e.g., PanReac"
+							<CreatableCombobox
+								options={brandOptions?.map(b => ({ value: b.name, label: b.name, equipmentCount: b.equipmentCount })) || []}
 								value={templateBrand}
-								onChange={(e) => setTemplateBrand(e.target.value)}
-								className="rounded-xl"
+								onChange={(val) => setTemplateBrand(val)}
+								onCreateOption={(val) => {
+									setIsCreatingBrand(true);
+									createBrandMutation.mutate({ name: val }, {
+										onSettled: () => setIsCreatingBrand(false),
+										onSuccess: (data) => setTemplateBrand(data.name)
+									});
+								}}
+								onDeleteOption={(val, name, count) => {
+									setBrandToDelete({ name: val, equipmentCount: count });
+								}}
+								placeholder="Select brand..."
+								emptyText="No brands found."
+								isCreating={isCreatingBrand}
 							/>
-							<datalist id="add-brands">
-								{existingBrands.map(b => <option key={b} value={b} />)}
-							</datalist>
 						</div>
 					</div>
 					<div className="grid grid-cols-2 gap-3">
@@ -2104,6 +2159,15 @@ const Lab = ({
 								</SelectContent>
 							</Select>
 						</div>
+					</div>
+					<div className="space-y-1.5">
+						<label className="text-sm font-medium">Location</label>
+						<Input
+							placeholder="e.g., Cabinet A / Shelf 2"
+							value={templateLocation}
+							onChange={(e) => setTemplateLocation(e.target.value)}
+							className="rounded-xl"
+						/>
 					</div>
 					<div className="grid grid-cols-2 gap-3">
 						<div className="space-y-1.5">
@@ -2159,29 +2223,45 @@ const Lab = ({
 						<div className="grid grid-cols-2 gap-3">
 							<div className="space-y-1.5">
 								<label className="text-sm font-medium">Category</label>
-								<Input
-									list="edit-categories"
-									value={labEditItem.category}
-									onChange={(e) => setLabEditItem({ ...labEditItem, category: e.target.value })}
-									className="rounded-xl"
-									placeholder="e.g., Acid, Base..."
+								<CreatableCombobox
+									options={categories?.map(c => ({ value: c.id, label: c.name, equipmentCount: c.equipmentCount })) || []}
+									value={categories?.find(c => c.name === labEditItem.category)?.id ?? ""}
+									onChange={(val, label) => setLabEditItem({ ...labEditItem, category: label })}
+									onCreateOption={(val) => {
+										setIsCreatingCategory(true);
+										createCategoryMutation.mutate({ name: val }, {
+											onSettled: () => setIsCreatingCategory(false),
+											onSuccess: (data) => setLabEditItem({ ...labEditItem, category: data.name })
+										});
+									}}
+									onDeleteOption={(val, name, count) => {
+										setCategoryToDelete({ id: val, name, equipmentCount: count });
+									}}
+									placeholder="Select category..."
+									emptyText="No categories found."
+									isCreating={isCreatingCategory}
 								/>
-								<datalist id="edit-categories">
-									{existingCategories.map(cat => <option key={cat} value={cat} />)}
-								</datalist>
 							</div>
 							<div className="space-y-1.5">
 								<label className="text-sm font-medium">Brand</label>
-								<Input
-									list="edit-brands"
+								<CreatableCombobox
+									options={brandOptions?.map(b => ({ value: b.name, label: b.name, equipmentCount: b.equipmentCount })) || []}
 									value={labEditItem.brand}
-									onChange={(e) => setLabEditItem({ ...labEditItem, brand: e.target.value })}
-									className="rounded-xl"
-									placeholder="e.g., PanReac"
+									onChange={(val) => setLabEditItem({ ...labEditItem, brand: val })}
+									onCreateOption={(val) => {
+										setIsCreatingBrand(true);
+										createBrandMutation.mutate({ name: val }, {
+											onSettled: () => setIsCreatingBrand(false),
+											onSuccess: (data) => setLabEditItem({ ...labEditItem, brand: data.name })
+										});
+									}}
+									onDeleteOption={(val, name, count) => {
+										setBrandToDelete({ name: val, equipmentCount: count });
+									}}
+									placeholder="Select brand..."
+									emptyText="No brands found."
+									isCreating={isCreatingBrand}
 								/>
-								<datalist id="edit-brands">
-									{existingBrands.map(b => <option key={b} value={b} />)}
-								</datalist>
 							</div>
 						</div>
 						<div className="grid grid-cols-2 gap-3">
@@ -2212,6 +2292,15 @@ const Lab = ({
 									</SelectContent>
 								</Select>
 							</div>
+						</div>
+						<div className="space-y-1.5">
+							<label className="text-sm font-medium">Location</label>
+							<Input
+								value={labEditItem.location}
+								onChange={(e) => setLabEditItem({ ...labEditItem, location: e.target.value })}
+								className="rounded-xl"
+								placeholder="e.g., Cabinet A / Shelf 2"
+							/>
 						</div>
 						<div className="grid grid-cols-2 gap-3">
 							<div className="space-y-1.5">
@@ -2247,6 +2336,64 @@ const Lab = ({
 				</div>
 			</DialogContent>
 		</Dialog>
+
+		<AlertDialog open={!!categoryToDelete} onOpenChange={(open) => !open && setCategoryToDelete(null)}>
+			<AlertDialogContent className="rounded-2xl sm:max-w-[425px]">
+				<AlertDialogHeader>
+					<AlertDialogTitle className="text-xl">Delete Category</AlertDialogTitle>
+					<AlertDialogDescription className="text-base pt-2">
+						Are you sure you want to permanently delete "{categoryToDelete?.name}"?
+						{categoryToDelete && categoryToDelete.equipmentCount !== undefined && categoryToDelete.equipmentCount > 0 && (
+							<div className="mt-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-400 text-sm">
+								<strong>Warning:</strong> {categoryToDelete.equipmentCount} equipment {categoryToDelete.equipmentCount === 1 ? 'item' : 'items'} currently use this category. They will be set to have no category.
+							</div>
+						)}
+					</AlertDialogDescription>
+				</AlertDialogHeader>
+				<AlertDialogFooter className="mt-4">
+					<AlertDialogCancel className="rounded-xl">Cancel</AlertDialogCancel>
+					<AlertDialogAction
+						onClick={() => {
+							if (categoryToDelete) {
+								deleteCategoryMutation.mutate({ id: categoryToDelete.id });
+							}
+						}}
+						className="rounded-xl bg-destructive text-destructive-foreground hover:bg-destructive/90"
+					>
+						Yes, delete it
+					</AlertDialogAction>
+				</AlertDialogFooter>
+			</AlertDialogContent>
+		</AlertDialog>
+
+		<AlertDialog open={!!brandToDelete} onOpenChange={(open) => !open && setBrandToDelete(null)}>
+			<AlertDialogContent className="rounded-2xl sm:max-w-[425px]">
+				<AlertDialogHeader>
+					<AlertDialogTitle className="text-xl">Delete Brand</AlertDialogTitle>
+					<AlertDialogDescription className="text-base pt-2">
+						Are you sure you want to delete the brand "{brandToDelete?.name}"?
+						{brandToDelete && brandToDelete.equipmentCount !== undefined && brandToDelete.equipmentCount > 0 && (
+							<div className="mt-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-400 text-sm">
+								<strong>Warning:</strong> {brandToDelete.equipmentCount} equipment {brandToDelete.equipmentCount === 1 ? 'item' : 'items'} currently use this brand. They will be set to have no brand.
+							</div>
+						)}
+					</AlertDialogDescription>
+				</AlertDialogHeader>
+				<AlertDialogFooter className="mt-4">
+					<AlertDialogCancel className="rounded-xl">Cancel</AlertDialogCancel>
+					<AlertDialogAction
+						onClick={() => {
+							if (brandToDelete) {
+								deleteBrandMutation.mutate({ name: brandToDelete.name });
+							}
+						}}
+						className="rounded-xl bg-destructive text-destructive-foreground hover:bg-destructive/90"
+					>
+						Yes, delete it
+					</AlertDialogAction>
+				</AlertDialogFooter>
+			</AlertDialogContent>
+		</AlertDialog>
 		</div>
 	);
 };

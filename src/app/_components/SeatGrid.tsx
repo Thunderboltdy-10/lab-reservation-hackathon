@@ -75,7 +75,7 @@ const Seat = ({
 			tabIndex={isClickable ? 0 : -1}
 			aria-disabled={!isClickable}
 			className={cn(
-				"flex h-16 min-w-[84px] flex-col items-center justify-center rounded-xl font-semibold text-sm",
+				"flex h-12 sm:h-16 w-full min-w-[60px] sm:min-w-[80px] flex-col items-center justify-center rounded-xl font-semibold text-sm",
 				"transition-all duration-300 ease-out",
 				getSeatColor(),
 				(!isClickable || disabled) &&
@@ -89,9 +89,9 @@ const Seat = ({
 					: name
 			}
 		>
-			<span className="font-bold text-base">{name}</span>
+			<span className="font-bold text-sm sm:text-base">{name}</span>
 			{isOccupied && occupantName && (
-				<span className="max-w-[72px] truncate text-[11px] opacity-90">
+				<span className="max-w-[56px] sm:max-w-[72px] truncate text-[10px] sm:text-[11px] opacity-90">
 					{occupantName.split(" ")[0]}
 				</span>
 			)}
@@ -204,7 +204,7 @@ const SeatGrid = ({
 				tabIndex={isClickable ? 0 : -1}
 				aria-disabled={!isClickable}
 				className={cn(
-					"flex h-[140px] w-24 flex-col items-center justify-center rounded-xl font-semibold text-sm",
+					"flex w-16 sm:w-20 md:w-24 h-[120px] sm:h-[140px] flex-col items-center justify-center rounded-xl font-semibold text-sm",
 					"transition-all duration-300 ease-out",
 					!selectionActive && !isOccupied && !isUserSeat && !isPending
 						? "border border-border/60 bg-muted/70 text-muted-foreground"
@@ -225,9 +225,9 @@ const SeatGrid = ({
 						: seatName
 				}
 			>
-				<span className="font-bold text-base">{seatName}</span>
+				<span className="font-bold text-sm sm:text-base">{seatName}</span>
 				{isOccupied && occupantName && (
-					<span className="max-w-[72px] truncate text-[11px] opacity-90">
+					<span className="max-w-[56px] sm:max-w-[72px] truncate text-[10px] sm:text-[11px] opacity-90">
 						{occupantName.split(" ")[0]}
 					</span>
 				)}
@@ -245,38 +245,38 @@ const SeatGrid = ({
 	const edgeSeat = renderEdgeSeat();
 	const edgeOnLeft = screenSide === "right";
 
-	// Screen/Door column
+	// Screen/Door column - responsive widths that scale down
 	const ScreenDoorColumn = () => (
 		<div
 			className={cn(
-				"flex shrink-0 flex-col justify-between gap-4",
+				"flex shrink-0 flex-col justify-between gap-2 sm:gap-3 md:gap-4",
 				screenSide === "left" ? "items-start" : "items-end",
 			)}
 		>
-			<div className="flex h-40 w-16 items-center justify-center rounded-xl border border-border/60 bg-muted/50 font-medium text-[11px] text-muted-foreground uppercase tracking-wide">
+			<div className="flex h-28 sm:h-36 md:h-40 w-12 sm:w-14 md:w-16 items-center justify-center rounded-xl border border-border/60 bg-muted/50 font-medium text-[10px] sm:text-[11px] text-muted-foreground uppercase tracking-wide">
 				Screen
 			</div>
-			<div className="flex h-10 w-16 items-center justify-center rounded-md border border-border/60 bg-muted/30 text-[10px] text-muted-foreground">
+			<div className="flex h-8 sm:h-9 md:h-10 w-12 sm:w-14 md:w-16 items-center justify-center rounded-md border border-border/60 bg-muted/30 text-[9px] sm:text-[10px] text-muted-foreground">
 				Door
 			</div>
 		</div>
 	);
 
 	return (
-		<div className="flex w-full flex-col items-stretch">
-			{/* Main grid */}
-			<div className="flex w-full items-stretch gap-5">
+		<div className="flex w-full flex-col items-stretch overflow-hidden">
+			{/* Main grid - overflow-hidden so anything that slightly overflows clips instead of pushing layout wider */}
+			<div className="flex w-full items-stretch gap-3 sm:gap-4 md:gap-5 overflow-hidden">
 				{screenSide === "left" && <ScreenDoorColumn />}
 
-				<div className="flex flex-1 flex-col gap-4">
+				<div className="flex flex-1 flex-col gap-3 sm:gap-3 md:gap-4 min-w-0">
 					{/* Rows A and B with edge seat */}
-					<div className="flex items-center gap-4">
+					<div className="flex items-center gap-3 sm:gap-3 md:gap-4 min-w-0">
 						{edgeOnLeft && edgeSeat && (
 							<div className="shrink-0">{edgeSeat}</div>
 						)}
-						<div className="flex flex-1 flex-col gap-3">
-							{rowA && <div className="flex gap-3">{renderRow(rowA, 0)}</div>}
-							{rowB && <div className="flex gap-3">{renderRow(rowB, 1)}</div>}
+						<div className="flex flex-1 flex-col gap-2 sm:gap-2 md:gap-3 min-w-0">
+							{rowA && <div className="flex gap-2 sm:gap-2 md:gap-3 min-w-0">{renderRow(rowA, 0)}</div>}
+							{rowB && <div className="flex gap-2 sm:gap-2 md:gap-3 min-w-0">{renderRow(rowB, 1)}</div>}
 						</div>
 						{!edgeOnLeft && edgeSeat && (
 							<div className="shrink-0">{edgeSeat}</div>
@@ -285,9 +285,9 @@ const SeatGrid = ({
 
 					{/* Remaining rows */}
 					{remainingRows.length > 0 && (
-						<div className="mt-3 flex flex-col gap-3 border-border/40 border-t pt-4">
+						<div className="mt-2 sm:mt-2 md:mt-3 flex flex-col gap-2 sm:gap-2 md:gap-3 border-border/40 border-t pt-3 sm:pt-3 md:pt-4 min-w-0">
 							{remainingRows.map((rowConfig, index) => (
-								<div key={rowConfig.name} className="flex gap-3">
+								<div key={rowConfig.name} className="flex gap-2 sm:gap-2 md:gap-3 min-w-0">
 									{renderRow(rowConfig, index + 2)}
 								</div>
 							))}

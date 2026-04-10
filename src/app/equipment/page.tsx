@@ -25,6 +25,11 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
+	Popover,
+	PopoverContent,
+	PopoverTrigger,
+} from "@/components/ui/popover";
+import {
 	Select,
 	SelectContent,
 	SelectItem,
@@ -44,6 +49,7 @@ import {
 	Trash2,
 	Globe
 } from "lucide-react";
+import { CreatableCombobox } from "@/components/ui/creatable-combobox";
 import React, { useMemo, useState, useEffect } from "react";
 import { toast } from "sonner";
 import {
@@ -78,7 +84,7 @@ export default function EquipmentPage() {
 		total: number;
 		unitType: UnitType;
 		expirationDate: Date | null;
-        category: string;
+        category: string | { id: string; name: string } | null;
         casNumber: string;
 	        brand: string;
 	        location: string;
@@ -130,6 +136,49 @@ export default function EquipmentPage() {
     const [newBrand, setNewBrand] = useState("");
     const [newLocation, setNewLocation] = useState(activeLabOption?.location ?? "");
     const [addLabId, setAddLabId] = useState<string>(activeLabOption?.id ?? "");
+    const [newCategoryId, setNewCategoryId] = useState<string>("");
+    const [newCategoryName, setNewCategoryName] = useState("");
+    const [categoryPopoverOpen, setCategoryPopoverOpen] = useState(false);
+    const [brandPopoverOpen, setBrandPopoverOpen] = useState(false);
+    const [newBrandId, setNewBrandId] = useState<string>("");
+    const [isCreatingCategory, setIsCreatingCategory] = useState(false);
+    const [isCreatingBrand, setIsCreatingBrand] = useState(false);
+    const [categoryToDelete, setCategoryToDelete] = useState<{id: string, name: string, equipmentCount?: number} | null>(null);
+    const [brandToDelete, setBrandToDelete] = useState<{name: string, equipmentCount?: number} | null>(null);
+
+    const { data: categories, refetch: refetchCategories } = api.account.getEquipmentCategories.useQuery();
+    const { data: brandOptions, refetch: refetchBrands } = api.account.getEquipmentBrands.useQuery();
+    const createCategoryMutation = api.account.createEquipmentCategory.useMutation({
+        onSuccess: (data) => {
+            setNewCategoryId(data.id);
+            toast.success("Category created");
+            refetchCategories();
+            refetch();
+        },
+    });
+    const deleteCategoryMutation = api.account.deleteEquipmentCategory.useMutation({
+        onSuccess: () => {
+            toast.success("Category deleted");
+            refetchCategories();
+            refetch();
+            setCategoryToDelete(null);
+        },
+    });
+    const createBrandMutation = api.account.createEquipmentBrand.useMutation({
+        onSuccess: (data) => {
+            setNewBrand(data.name);
+            toast.success("Brand created");
+            refetchBrands();
+        },
+    });
+    const deleteBrandMutation = api.account.deleteEquipmentBrand.useMutation({
+        onSuccess: () => {
+            toast.success("Brand deleted");
+            refetchBrands();
+            refetch();
+            setBrandToDelete(null);
+        },
+    });
     
     // Pagination / Infinite scroll state
     const [visibleCount, setVisibleCount] = useState(20);
@@ -177,7 +226,7 @@ export default function EquipmentPage() {
 				total: newTotal,
 				unitType: newUnitType,
 				expirationDate: newExpiration ? new Date(newExpiration) : undefined,
-                category: newCategory,
+                categoryId: newCategoryId,
                 casNumber: newCasNumber,
                 brand: newBrand,
                 location: newLocation,
@@ -224,7 +273,7 @@ export default function EquipmentPage() {
 				total: editingEquipment.total,
 				unitType: editingEquipment.unitType,
 				expirationDate: editingEquipment.expirationDate,
-                category: editingEquipment.category,
+                categoryId: (editingEquipment.category as { id: string } | null)?.id,
                 casNumber: editingEquipment.casNumber,
                 brand: editingEquipment.brand,
                 location: editingEquipment.location,
@@ -270,9 +319,9 @@ export default function EquipmentPage() {
 		return null;
 	};
 
-    const categories = useMemo(() => {
+    const categoryFilterOptions = useMemo(() => {
         if (!equipment) return [];
-        const cats = new Set(equipment.map(e => e.category || 'General'));
+        const cats = new Set(equipment.map(e => e.category?.name || 'General'));
         return Array.from(cats).sort();
     }, [equipment]);
 
@@ -286,7 +335,7 @@ export default function EquipmentPage() {
         return equipment.filter(item => {
             const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
                                   (item.casNumber && item.casNumber.toLowerCase().includes(searchQuery.toLowerCase()));
-            const matchesCategory = categoryFilter === "ALL" || (item.category || 'General') === categoryFilter;
+            const matchesCategory = categoryFilter === "ALL" || (item.category?.name || 'General') === categoryFilter;
             return matchesSearch && matchesCategory;
         });
     }, [equipment, searchQuery, categoryFilter]);
@@ -364,17 +413,23 @@ export default function EquipmentPage() {
 							</div>
                             <div className="space-y-2 col-span-2 md:col-span-1">
 								<Label htmlFor="category">Category</Label>
-								<Input
-									id="category"
-									list="eq-categories"
-                                    className="rounded-xl"
-									value={newCategory}
-									onChange={(e) => setNewCategory(e.target.value)}
-									placeholder="e.g., General Organic"
+								<CreatableCombobox
+									options={categories?.map(c => ({ value: c.id, label: c.name, equipmentCount: c.equipmentCount })) || []}
+									value={newCategoryId}
+									onChange={(val) => setNewCategoryId(val)}
+									onCreateOption={(val) => {
+										setIsCreatingCategory(true);
+										createCategoryMutation.mutate({ name: val }, {
+											onSettled: () => setIsCreatingCategory(false)
+										});
+									}}
+									onDeleteOption={(val, name, count) => {
+										setCategoryToDelete({ id: val, name, equipmentCount: count });
+									}}
+									placeholder="Select category..."
+									emptyText="No categories found."
+									isCreating={isCreatingCategory}
 								/>
-								<datalist id="eq-categories">
-									{categories.map(cat => <option key={cat} value={cat} />)}
-								</datalist>
 							</div>
                             <div className="space-y-2 col-span-2 md:col-span-1">
 								<Label htmlFor="cas">CAS Number</Label>
@@ -388,17 +443,23 @@ export default function EquipmentPage() {
 							</div>
 	                            <div className="space-y-2 col-span-2 md:col-span-1">
 									<Label htmlFor="brand">Brand</Label>
-								<Input
-									id="brand"
-									list="eq-brands"
-                                    className="rounded-xl"
-									value={newBrand}
-									onChange={(e) => setNewBrand(e.target.value)}
-									placeholder="e.g., PanReac"
-								/>
-									<datalist id="eq-brands">
-										{brands.map(b => <option key={b} value={b} />)}
-									</datalist>
+									<CreatableCombobox
+										options={brandOptions?.map(b => ({ value: b.name, label: b.name, equipmentCount: b.equipmentCount })) || []}
+										value={newBrand}
+										onChange={(val) => setNewBrand(val)}
+										onCreateOption={(val) => {
+											setIsCreatingBrand(true);
+											createBrandMutation.mutate({ name: val }, {
+												onSettled: () => setIsCreatingBrand(false)
+											});
+										}}
+										onDeleteOption={(val, name, count) => {
+											setBrandToDelete({ name: val, equipmentCount: count });
+										}}
+										placeholder="Select brand..."
+										emptyText="No brands found."
+										isCreating={isCreatingBrand}
+									/>
 								</div>
 	                            <div className="space-y-2 col-span-2 md:col-span-1">
 									<Label htmlFor="location">Location</Label>
@@ -473,6 +534,64 @@ export default function EquipmentPage() {
 						</DialogFooter>
 					</DialogContent>
 				</Dialog>
+
+                <AlertDialog open={!!categoryToDelete} onOpenChange={(open) => !open && setCategoryToDelete(null)}>
+                    <AlertDialogContent className="rounded-2xl sm:max-w-[425px]">
+                        <AlertDialogHeader>
+                            <AlertDialogTitle className="text-xl">Delete Category</AlertDialogTitle>
+                            <AlertDialogDescription className="text-base pt-2">
+                                Are you sure you want to permanently delete "{categoryToDelete?.name}"?
+                                {categoryToDelete && categoryToDelete.equipmentCount !== undefined && categoryToDelete.equipmentCount > 0 && (
+                                    <div className="mt-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-400 text-sm">
+                                        <strong>Warning:</strong> {categoryToDelete.equipmentCount} equipment {categoryToDelete.equipmentCount === 1 ? 'item' : 'items'} currently use this category. They will be set to have no category.
+                                    </div>
+                                )}
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter className="mt-4">
+                            <AlertDialogCancel className="rounded-xl">Cancel</AlertDialogCancel>
+                            <AlertDialogAction
+                                onClick={() => {
+                                    if (categoryToDelete) {
+                                        deleteCategoryMutation.mutate({ id: categoryToDelete.id });
+                                    }
+                                }}
+                                className="rounded-xl bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                            >
+                                Yes, delete it
+                            </AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
+
+                <AlertDialog open={!!brandToDelete} onOpenChange={(open) => !open && setBrandToDelete(null)}>
+                    <AlertDialogContent className="rounded-2xl sm:max-w-[425px]">
+                        <AlertDialogHeader>
+                            <AlertDialogTitle className="text-xl">Delete Brand</AlertDialogTitle>
+                            <AlertDialogDescription className="text-base pt-2">
+                                Are you sure you want to delete the brand "{brandToDelete?.name}"?
+                                {brandToDelete && brandToDelete.equipmentCount !== undefined && brandToDelete.equipmentCount > 0 && (
+                                    <div className="mt-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-400 text-sm">
+                                        <strong>Warning:</strong> {brandToDelete.equipmentCount} equipment {brandToDelete.equipmentCount === 1 ? 'item' : 'items'} currently use this brand. They will be set to have no brand.
+                                    </div>
+                                )}
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter className="mt-4">
+                            <AlertDialogCancel className="rounded-xl">Cancel</AlertDialogCancel>
+                            <AlertDialogAction
+                                onClick={() => {
+                                    if (brandToDelete) {
+                                        deleteBrandMutation.mutate({ name: brandToDelete.name });
+                                    }
+                                }}
+                                className="rounded-xl bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                            >
+                                Yes, delete it
+                            </AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
 			</div>
 
             {/* Filters Section */}
@@ -527,7 +646,10 @@ export default function EquipmentPage() {
                             </SelectTrigger>
                             <SelectContent className="rounded-xl">
                                 <SelectItem value="ALL">All Categories</SelectItem>
-                                {categories.map(cat => (
+                                {categories?.map(cat => (
+                                    <SelectItem key={cat.id} value={cat.name}>{cat.name}</SelectItem>
+                                ))}
+                                {categoryFilterOptions.filter(c => !categories?.some(db => db.name === c)).map(cat => (
                                     <SelectItem key={cat} value={cat}>{cat}</SelectItem>
                                 ))}
                             </SelectContent>
@@ -574,7 +696,7 @@ export default function EquipmentPage() {
                                             </td>
                                             <td className="px-6 py-4">
                                                 <Badge variant="secondary" className="font-normal rounded-lg mb-1 whitespace-nowrap">
-                                                    {item.category || "General"}
+                                                    {item.category?.name || "General"}
                                                 </Badge>
                                                 {item.casNumber && (
                                                     <div className="text-xs text-muted-foreground mt-1.5 font-mono">CAS: {item.casNumber}</div>
@@ -651,18 +773,28 @@ export default function EquipmentPage() {
                                                                 </div>
                                                                 <div className="space-y-2 col-span-2 md:col-span-1">
                                                                     <Label htmlFor="edit-category">Category</Label>
-                                                                    <Input
-                                                                        id="edit-category"
-                                                                        list="edit-eq-categories"
-                                                                        className="rounded-xl"
-                                                                        value={editingEquipment?.category ?? ""}
-                                                                        onChange={(e) =>
-                                                                            setEditingEquipment((prev) => prev ? { ...prev, category: e.target.value } : null)
+                                                                    <CreatableCombobox
+                                                                        options={categories?.map(c => ({ value: c.id, label: c.name, equipmentCount: c.equipmentCount })) || []}
+                                                                        value={(editingEquipment?.category as { id: string })?.id ?? ""}
+                                                                        onChange={(val, label) =>
+                                                                            setEditingEquipment((prev) => prev ? { ...prev, category: { id: val, name: label } } : null)
                                                                         }
+                                                                        onCreateOption={(val) => {
+                                                                            setIsCreatingCategory(true);
+                                                                            createCategoryMutation.mutate({ name: val }, {
+                                                                                onSettled: () => setIsCreatingCategory(false),
+                                                                                onSuccess: (data) => {
+                                                                                    setEditingEquipment((prev) => prev ? { ...prev, category: { id: data.id, name: data.name } } : null);
+                                                                                }
+                                                                            });
+                                                                        }}
+                                                                        onDeleteOption={(val, name, count) => {
+                                                                            setCategoryToDelete({ id: val, name, equipmentCount: count });
+                                                                        }}
+                                                                        placeholder="Select category..."
+                                                                        emptyText="No categories found."
+                                                                        isCreating={isCreatingCategory}
                                                                     />
-                                                                    <datalist id="edit-eq-categories">
-                                                                        {categories.map(cat => <option key={cat} value={cat} />)}
-                                                                    </datalist>
                                                                 </div>
                                                                 <div className="space-y-2 col-span-2 md:col-span-1">
                                                                     <Label htmlFor="edit-cas">CAS Number</Label>
@@ -677,18 +809,28 @@ export default function EquipmentPage() {
                                                                 </div>
                                                                 <div className="space-y-2 col-span-2 md:col-span-1">
                                                                     <Label htmlFor="edit-brand">Brand</Label>
-                                                                    <Input
-                                                                        id="edit-brand"
-                                                                        list="edit-eq-brands"
-                                                                        className="rounded-xl"
+                                                                    <CreatableCombobox
+                                                                        options={brandOptions?.map(b => ({ value: b.name, label: b.name, equipmentCount: b.equipmentCount })) || []}
                                                                         value={editingEquipment?.brand ?? ""}
-                                                                        onChange={(e) =>
-                                                                            setEditingEquipment((prev) => prev ? { ...prev, brand: e.target.value } : null)
+                                                                        onChange={(val) =>
+                                                                            setEditingEquipment((prev) => prev ? { ...prev, brand: val } : null)
                                                                         }
+                                                                        onCreateOption={(val) => {
+                                                                            setIsCreatingBrand(true);
+                                                                            createBrandMutation.mutate({ name: val }, {
+                                                                                onSettled: () => setIsCreatingBrand(false),
+                                                                                onSuccess: (data) => {
+                                                                                    setEditingEquipment((prev) => prev ? { ...prev, brand: data.name } : null);
+                                                                                }
+                                                                            });
+                                                                        }}
+                                                                        onDeleteOption={(val, name, count) => {
+                                                                            setBrandToDelete({ name: val, equipmentCount: count });
+                                                                        }}
+                                                                        placeholder="Select brand..."
+                                                                        emptyText="No brands found."
+                                                                        isCreating={isCreatingBrand}
                                                                     />
-                                                                    <datalist id="edit-eq-brands">
-                                                                        {brands.map(b => <option key={b} value={b} />)}
-                                                                    </datalist>
                                                                 </div>
                                                                 <div className="space-y-2">
                                                                     <Label htmlFor="edit-unit">Unit Type</Label>
