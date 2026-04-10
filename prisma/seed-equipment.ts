@@ -1,40 +1,48 @@
-import { PrismaClient } from '@prisma/client';
-import * as fs from 'fs';
-import * as path from 'path';
+import * as fs from "node:fs";
+import * as path from "node:path";
+import { type EquipmentUnit, PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
-function parseQuantityAndUnit(qStr: string): { total: number, unitType: string } {
-    const match = qStr.match(/^(\d+(?:[.,]\d+)?)\s*([a-zA-Z]+)(?:\s*\(.*\))?$/);
-    if (!match || !match[1] || !match[2]) return { total: parseInt(qStr) || 1, unitType: 'UNIT' };
-    
-    const val = parseFloat(match[1].replace(',', '.'));
-    const unitRaw = match[2].toUpperCase();
-    
-    let unitType = 'UNIT';
-    if (['ML', 'L', 'G', 'MG'].includes(unitRaw)) {
-        unitType = unitRaw;
-    } else if (unitRaw === 'BOX') {
-        unitType = 'BOX';
-    } else if (unitRaw === 'TABLETS') {
-        unitType = 'TABLETS';
-    } else if (qStr.toLowerCase().includes('ml')) {
-        unitType = 'ML';
-    } else if (qStr.toLowerCase().includes('g')) {
-        unitType = 'G';
-    }
+function parseQuantityAndUnit(qStr: string): {
+	total: number;
+	unitType: EquipmentUnit;
+} {
+	const match = qStr.match(/^(\d+(?:[.,]\d+)?)\s*([a-zA-Z]+)(?:\s*\(.*\))?$/);
+	if (!match || !match[1] || !match[2])
+		return { total: Number.parseInt(qStr) || 1, unitType: "UNIT" };
 
-    return { total: isNaN(val) ? 1 : Math.round(val), unitType };
+	const val = Number.parseFloat(match[1].replace(",", "."));
+	const unitRaw = match[2].toUpperCase();
+
+	let unitType: EquipmentUnit = "UNIT";
+	if (["ML", "L", "G", "MG"].includes(unitRaw)) {
+		unitType = unitRaw as EquipmentUnit;
+	} else if (unitRaw === "BOX") {
+		unitType = "BOX";
+	} else if (unitRaw === "TABLETS") {
+		unitType = "TABLETS";
+	} else if (qStr.toLowerCase().includes("ml")) {
+		unitType = "ML";
+	} else if (qStr.toLowerCase().includes("g")) {
+		unitType = "G";
+	}
+
+	return { total: Number.isNaN(val) ? 1 : Math.round(val), unitType };
 }
 
 async function main() {
-    const dataPath = path.join(process.cwd(), 'seed-data.txt');
-    const content = fs.readFileSync(dataPath, 'utf-8');
-    const lines = content.split('\n').filter(l => l.trim().length > 0);
+	const dataPath = path.join(process.cwd(), "seed-data.txt");
+	const content = fs.readFileSync(dataPath, "utf-8");
+	const lines = content.split("\n").filter((l) => l.trim().length > 0);
 
-    // Get labs
-    const physicsLab = await prisma.lab.findFirst({ where: { name: { contains: 'physics', mode: 'insensitive' } } });
-    const biologyLab = await prisma.lab.findFirst({ where: { name: { contains: 'biology', mode: 'insensitive' } } });
+	// Get labs
+	const physicsLab = await prisma.lab.findFirst({
+		where: { name: { contains: "physics", mode: "insensitive" } },
+	});
+	const biologyLab = await prisma.lab.findFirst({
+		where: { name: { contains: "biology", mode: "insensitive" } },
+	});
 
 	if (!physicsLab || !biologyLab) {
 		const missingLabs: string[] = [];
@@ -43,131 +51,158 @@ async function main() {
 		throw new Error(`Required labs missing: ${missingLabs.join(", ")}`);
 	}
 
-    // Delete existing equipment
-    await prisma.sessionEquipment.deleteMany({});
-    await prisma.equipmentBooking.deleteMany({});
-    await prisma.equipment.deleteMany({});
+	// Delete existing equipment
+	await prisma.sessionEquipment.deleteMany({});
+	await prisma.equipmentBooking.deleteMany({});
+	await prisma.equipment.deleteMany({});
 
-    for (const line of lines) {
-        let category = 'General';
-        let labId = physicsLab.id;
-        let locationStr = 'Chem Lab';
+	for (const line of lines) {
+		let category = "General";
+		let labId = physicsLab.id;
+		let locationStr = "Chem Lab";
 
-        if (line.toLowerCase().includes('bio lab')) {
-            labId = biologyLab.id;
-            locationStr = 'Bio Lab';
-        } else if (line.toLowerCase().includes('chem lab')) {
-            labId = physicsLab.id;
-            locationStr = 'Chem Lab';
-        }
+		if (line.toLowerCase().includes("bio lab")) {
+			labId = biologyLab.id;
+			locationStr = "Bio Lab";
+		} else if (line.toLowerCase().includes("chem lab")) {
+			labId = physicsLab.id;
+			locationStr = "Chem Lab";
+		}
 
-        const words = line.split(' ');
-        
-        // Very basic parsing since the format is irregular
-        // We know location is at the end "Bio Lab" or "Chem Lab"
-        const noLocation = line.replace(/Bio Lab/i, '').replace(/Chem Lab/i, '').trim();
-        
-        const tokens = noLocation.split(/\s+/);
-        
-        if (tokens.length < 3) continue;
+		const words = line.split(" ");
 
-        // Categories are usually first 1-2 words: "Bio", "General Organic", "General Inorganic", "Corrosive Solid", "Flammable Water/Liquids", "Toxic Inorganic", "Others", "Oxidising Agent"
-        const possibleCategories = [
-            "General Organic", "General Inorganic", "Corrosive Solid", "Corrosive Water", 
-            "Flammable Water/Liquids", "Toxic Inorganic", "Oxidising Agent", "Bio", "potass", "Others"
-        ];
+		// Very basic parsing since the format is irregular
+		// We know location is at the end "Bio Lab" or "Chem Lab"
+		const noLocation = line
+			.replace(/Bio Lab/i, "")
+			.replace(/Chem Lab/i, "")
+			.trim();
 
-        for (const cat of possibleCategories) {
-            if (noLocation.startsWith(cat)) {
-                category = cat;
-                break;
-            }
-        }
+		const tokens = noLocation.split(/\s+/);
 
-        const afterCategory = noLocation.substring(category.length).trim();
-        const parts = afterCategory.split(/\s+/);
-        
-        let casNumber = null;
-        let quantityStr = '1 UNIT';
-        let expiryDate = null;
-        let name: string[] = [];
-        let brand: string[] = [];
+		if (tokens.length < 3) continue;
 
-        // find date YYYY-MM-DD
-        const dateIndex = parts.findIndex(p => /\d{4}-\d{2}-\d{2}/.test(p));
-        if (dateIndex !== -1) {
-            expiryDate = parts[dateIndex];
-        }
+		// Categories are usually first 1-2 words: "Bio", "General Organic", "General Inorganic", "Corrosive Solid", "Flammable Water/Liquids", "Toxic Inorganic", "Others", "Oxidising Agent"
+		const possibleCategories = [
+			"General Organic",
+			"General Inorganic",
+			"Corrosive Solid",
+			"Corrosive Water",
+			"Flammable Water/Liquids",
+			"Toxic Inorganic",
+			"Oxidising Agent",
+			"Bio",
+			"potass",
+			"Others",
+		];
 
-        // find CAS (digits-digits-digits) or "n/a"
-        // find Quantity (digits+g, ml, l)
-        for (let i = 0; i < parts.length; i++) {
-            const p = parts[i];
-            if (!p) continue;
-            if (/\d+-\d+-\d+/.test(p) && p !== expiryDate) {
-                casNumber = p;
-            } else if (/\d+(g|ml|l|mg)/i.test(p) || p === '100g(x2)') {
-                quantityStr = p;
-            }
-        }
+		for (const cat of possibleCategories) {
+			if (noLocation.startsWith(cat)) {
+				category = cat;
+				break;
+			}
+		}
 
-        // name is everything before cas or quantity
-        let nameEndIndex = parts.length;
-        if (casNumber) nameEndIndex = Math.min(nameEndIndex, parts.indexOf(casNumber));
-        if (quantityStr !== '1 UNIT') nameEndIndex = Math.min(nameEndIndex, parts.indexOf(quantityStr));
-        if (expiryDate) nameEndIndex = Math.min(nameEndIndex, parts.indexOf(expiryDate));
-        
-        // anything "n/a" in the first few parts is usually CAS
-        const naIndex = parts.indexOf('n/a');
-        if (naIndex !== -1 && naIndex < nameEndIndex) {
-            nameEndIndex = naIndex;
-        }
+		const afterCategory = noLocation.substring(category.length).trim();
+		const parts = afterCategory.split(/\s+/);
 
-        name = parts.slice(0, nameEndIndex);
+		let casNumber = null;
+		let quantityStr = "1 UNIT";
+		let expiryDate = null;
+		let name: string[] = [];
+		let brand: string[] = [];
 
-        // brand is anything after expiryDate, or after quantity if no expiry
-        let brandStartIndex = parts.length;
-        if (expiryDate) brandStartIndex = parts.indexOf(expiryDate) + 1;
-        else if (quantityStr !== '1 UNIT') brandStartIndex = parts.indexOf(quantityStr) + 1;
+		// find date YYYY-MM-DD
+		const dateIndex = parts.findIndex((p) => /\d{4}-\d{2}-\d{2}/.test(p));
+		if (dateIndex !== -1) {
+			expiryDate = parts[dateIndex];
+		}
 
-        if (brandStartIndex < parts.length) {
-            brand = parts.slice(brandStartIndex).filter(p => p !== 'n/a');
-        }
+		// find CAS (digits-digits-digits) or "n/a"
+		// find Quantity (digits+g, ml, l)
+		for (let i = 0; i < parts.length; i++) {
+			const p = parts[i];
+			if (!p) continue;
+			if (/\d+-\d+-\d+/.test(p) && p !== expiryDate) {
+				casNumber = p;
+			} else if (/\d+(g|ml|l|mg)/i.test(p) || p === "100g(x2)") {
+				quantityStr = p;
+			}
+		}
 
-        const nameStr = name.join(' ').replace(/^n\/a\s*/, '').trim() || 'Unknown';
-        const brandStr = brand.join(' ').trim() || null;
-        
-        const { total, unitType } = parseQuantityAndUnit(quantityStr);
+		// name is everything before cas or quantity
+		let nameEndIndex = parts.length;
+		if (casNumber)
+			nameEndIndex = Math.min(nameEndIndex, parts.indexOf(casNumber));
+		if (quantityStr !== "1 UNIT")
+			nameEndIndex = Math.min(nameEndIndex, parts.indexOf(quantityStr));
+		if (expiryDate)
+			nameEndIndex = Math.min(nameEndIndex, parts.indexOf(expiryDate));
 
-        let parsedDate = null;
-        if (expiryDate) {
-            parsedDate = new Date(expiryDate);
-            if (isNaN(parsedDate.getTime())) parsedDate = null;
-        }
+		// anything "n/a" in the first few parts is usually CAS
+		const naIndex = parts.indexOf("n/a");
+		if (naIndex !== -1 && naIndex < nameEndIndex) {
+			nameEndIndex = naIndex;
+		}
 
-        await prisma.equipment.create({
-            data: {
-                labId,
-                category,
-                name: nameStr,
-                casNumber,
-                total,
-                unitType: unitType as any,
-                expirationDate: parsedDate,
-                brand: brandStr,
-                location: locationStr
-            }
-        });
-    }
+		name = parts.slice(0, nameEndIndex);
 
-    console.log("Seeding complete!");
+		// brand is anything after expiryDate, or after quantity if no expiry
+		let brandStartIndex = parts.length;
+		if (expiryDate) brandStartIndex = parts.indexOf(expiryDate) + 1;
+		else if (quantityStr !== "1 UNIT")
+			brandStartIndex = parts.indexOf(quantityStr) + 1;
+
+		if (brandStartIndex < parts.length) {
+			brand = parts.slice(brandStartIndex).filter((p) => p !== "n/a");
+		}
+
+		const nameStr =
+			name
+				.join(" ")
+				.replace(/^n\/a\s*/, "")
+				.trim() || "Unknown";
+		const brandStr = brand.join(" ").trim() || null;
+
+		const { total, unitType } = parseQuantityAndUnit(quantityStr);
+
+		let parsedDate = null;
+		if (expiryDate) {
+			parsedDate = new Date(expiryDate);
+			if (Number.isNaN(parsedDate.getTime())) parsedDate = null;
+		}
+
+		const categoryRec = await prisma.equipmentCategory.findUnique({
+			where: { name: category },
+		});
+		if (!categoryRec) {
+			throw new Error(
+				`Missing equipment category "${category}" while seeding "${nameStr}"`,
+			);
+		}
+		await prisma.equipment.create({
+			data: {
+				labId,
+				categoryId: categoryRec.id,
+				name: nameStr,
+				casNumber,
+				total,
+				unitType,
+				expirationDate: parsedDate,
+				brand: brandStr,
+				location: locationStr,
+			},
+		});
+	}
+
+	console.log("Seeding complete!");
 }
 
 main()
-  .catch((e) => {
-    console.error(e)
-    process.exit(1)
-  })
-  .finally(async () => {
-    await prisma.$disconnect()
-  })
+	.catch((e) => {
+		console.error(e);
+		process.exit(1);
+	})
+	.finally(async () => {
+		await prisma.$disconnect();
+	});

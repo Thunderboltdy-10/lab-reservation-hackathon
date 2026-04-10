@@ -147,11 +147,26 @@ model SeatBooking {
   @@unique([seatId, sessionId]) // seat cannot be assigned twice for same session
 }
 
+model EquipmentCategory {
+  id        String   @id @default(cuid())
+  name     String   @unique
+  createdAt DateTime @default(now())
+
+  equipment Equipment[]
+}
+
+model EquipmentBrand {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+}
+
 model Equipment {
   id          String   @id @default(cuid())
   labId       String
   lab         Lab      @relation(fields: [labId], references: [id])
-  category    String   @default("General")
+  categoryId  String?
+  category   EquipmentCategory? @relation(fields: [categoryId], references: [id])
   name        String
   casNumber   String?
   description String?
@@ -170,7 +185,7 @@ model Equipment {
   sessionAvailability SessionEquipment[]
   bookings            EquipmentBooking[]
 
-  @@index([labId, category])
+  @@index([labId, categoryId])
   @@index([expirationDate])
 }
 
