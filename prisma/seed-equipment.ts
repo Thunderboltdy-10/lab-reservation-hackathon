@@ -145,10 +145,11 @@ async function main() {
             if (isNaN(parsedDate.getTime())) parsedDate = null;
         }
 
+        const categoryRec = await prisma.equipmentCategory.findUnique({ where: { name: category } });
         await prisma.equipment.create({
             data: {
                 labId,
-                category,
+                categoryId: categoryRec?.id,
                 name: nameStr,
                 casNumber,
                 total,
