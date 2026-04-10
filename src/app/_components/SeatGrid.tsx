@@ -36,6 +36,39 @@ interface SeatProps {
 	className?: string;
 }
 
+interface SeatClassOptions {
+	isPending: boolean;
+	isUserSeat: boolean;
+	isOccupied: boolean;
+	isClickable: boolean;
+	disabled?: boolean;
+	selectionActive: boolean;
+}
+
+const getSeatClasses = ({
+	isPending,
+	isUserSeat,
+	isOccupied,
+	isClickable,
+	disabled,
+	selectionActive,
+}: SeatClassOptions) =>
+	cn(
+		!selectionActive && !isOccupied && !isUserSeat && !isPending
+			? "border border-border/60 bg-muted/70 text-muted-foreground"
+			: isPending
+				? "bg-amber-500 text-white hover:bg-amber-600"
+				: isUserSeat
+					? "bg-sky-500 text-white hover:bg-sky-600"
+					: isOccupied
+						? "bg-destructive text-destructive-foreground hover:bg-destructive/90"
+						: "bg-primary text-primary-foreground hover:bg-primary/90",
+		(!isClickable || disabled) &&
+			"pointer-events-none cursor-default shadow-none",
+		isClickable &&
+			"hover:-translate-y-1.5 cursor-pointer shadow-sm ring-offset-background hover:scale-[1.05] hover:shadow-xl hover:ring-2 hover:ring-primary/50 hover:ring-offset-2",
+	);
+
 const Seat = ({
 	name,
 	isOccupied,
@@ -47,23 +80,6 @@ const Seat = ({
 	selectionActive = true,
 	className,
 }: SeatProps) => {
-	const getSeatColor = () => {
-		// When no session is selected - gray, visible, no interaction styling
-		if (!selectionActive && !isOccupied && !isUserSeat && !isPending) {
-			return "bg-muted/70 text-muted-foreground border border-border/60";
-		}
-		if (isPending) {
-			return "bg-amber-500 hover:bg-amber-600 text-white"; // Pending approval
-		}
-		if (isUserSeat) {
-			return "bg-sky-500 hover:bg-sky-600 text-white"; // Your booking - distinct from pending
-		}
-		if (isOccupied) {
-			return "bg-destructive hover:bg-destructive/90 text-destructive-foreground"; // Occupied
-		}
-		return "bg-primary hover:bg-primary/90 text-primary-foreground"; // Available
-	};
-
 	// Completely disable interaction when no session selected (non-teacher)
 	const isClickable = selectionActive && !disabled;
 
@@ -75,12 +91,16 @@ const Seat = ({
 			tabIndex={isClickable ? 0 : -1}
 			aria-disabled={!isClickable}
 			className={cn(
-				"flex h-12 sm:h-16 w-full min-w-[60px] sm:min-w-[80px] flex-col items-center justify-center rounded-xl font-semibold text-sm",
+				"flex h-12 w-full min-w-[60px] flex-col items-center justify-center rounded-xl font-semibold text-sm sm:h-16 sm:min-w-[80px]",
 				"transition-all duration-300 ease-out",
-				getSeatColor(),
-				(!isClickable || disabled) &&
-					"pointer-events-none cursor-default shadow-none",
-				isClickable && "cursor-pointer shadow-sm hover:shadow-xl hover:-translate-y-1.5 hover:scale-[1.05] ring-offset-background hover:ring-2 hover:ring-offset-2 hover:ring-primary/50",
+				getSeatClasses({
+					isPending,
+					isUserSeat,
+					isOccupied,
+					isClickable,
+					disabled,
+					selectionActive,
+				}),
 				className,
 			)}
 			title={
@@ -91,7 +111,7 @@ const Seat = ({
 		>
 			<span className="font-bold text-sm sm:text-base">{name}</span>
 			{isOccupied && occupantName && (
-				<span className="max-w-[56px] sm:max-w-[72px] truncate text-[10px] sm:text-[11px] opacity-90">
+				<span className="max-w-[56px] truncate text-[10px] opacity-90 sm:max-w-[72px] sm:text-[11px]">
 					{occupantName.split(" ")[0]}
 				</span>
 			)}
@@ -204,20 +224,16 @@ const SeatGrid = ({
 				tabIndex={isClickable ? 0 : -1}
 				aria-disabled={!isClickable}
 				className={cn(
-					"flex w-16 sm:w-20 md:w-24 h-[120px] sm:h-[140px] flex-col items-center justify-center rounded-xl font-semibold text-sm",
+					"flex h-[120px] w-16 flex-col items-center justify-center rounded-xl font-semibold text-sm sm:h-[140px] sm:w-20 md:w-24",
 					"transition-all duration-300 ease-out",
-					!selectionActive && !isOccupied && !isUserSeat && !isPending
-						? "border border-border/60 bg-muted/70 text-muted-foreground"
-						: isPending
-							? "bg-amber-500 text-white hover:bg-amber-600"
-							: isUserSeat
-								? "bg-sky-500 text-white hover:bg-sky-600"
-								: isOccupied
-									? "bg-destructive text-destructive-foreground hover:bg-destructive/90"
-									: "bg-primary text-primary-foreground hover:bg-primary/90",
-					(!isClickable || disabled) &&
-						"pointer-events-none cursor-default shadow-none",
-					isClickable && "cursor-pointer shadow-sm hover:shadow-xl hover:-translate-y-1.5 hover:scale-[1.05] ring-offset-background hover:ring-2 hover:ring-offset-2 hover:ring-primary/50",
+					getSeatClasses({
+						isPending,
+						isUserSeat,
+						isOccupied,
+						isClickable,
+						disabled,
+						selectionActive,
+					}),
 				)}
 				title={
 					occupantName
@@ -227,7 +243,7 @@ const SeatGrid = ({
 			>
 				<span className="font-bold text-sm sm:text-base">{seatName}</span>
 				{isOccupied && occupantName && (
-					<span className="max-w-[56px] sm:max-w-[72px] truncate text-[10px] sm:text-[11px] opacity-90">
+					<span className="max-w-[56px] truncate text-[10px] opacity-90 sm:max-w-[72px] sm:text-[11px]">
 						{occupantName.split(" ")[0]}
 					</span>
 				)}
@@ -253,30 +269,38 @@ const SeatGrid = ({
 				screenSide === "left" ? "items-start" : "items-end",
 			)}
 		>
-			<div className="flex h-28 sm:h-36 md:h-40 w-12 sm:w-14 md:w-16 items-center justify-center rounded-xl border border-border/60 bg-muted/50 font-medium text-[10px] sm:text-[11px] text-muted-foreground uppercase tracking-wide">
+			<div className="flex h-28 w-12 items-center justify-center rounded-xl border border-border/60 bg-muted/50 font-medium text-[10px] text-muted-foreground uppercase tracking-wide sm:h-36 sm:w-14 sm:text-[11px] md:h-40 md:w-16">
 				Screen
 			</div>
-			<div className="flex h-8 sm:h-9 md:h-10 w-12 sm:w-14 md:w-16 items-center justify-center rounded-md border border-border/60 bg-muted/30 text-[9px] sm:text-[10px] text-muted-foreground">
+			<div className="flex h-8 w-12 items-center justify-center rounded-md border border-border/60 bg-muted/30 text-[9px] text-muted-foreground sm:h-9 sm:w-14 sm:text-[10px] md:h-10 md:w-16">
 				Door
 			</div>
 		</div>
 	);
 
 	return (
-		<div className="flex w-full flex-col items-stretch overflow-hidden">
-			{/* Main grid - overflow-hidden so anything that slightly overflows clips instead of pushing layout wider */}
-			<div className="flex w-full items-stretch gap-3 sm:gap-4 md:gap-5 overflow-hidden">
+		<div className="flex w-full flex-col items-stretch overflow-x-auto overflow-y-hidden">
+			{/* Main grid keeps vertical clipping but allows horizontal scroll on smaller screens */}
+			<div className="flex w-full items-stretch gap-3 overflow-x-auto overflow-y-hidden sm:gap-4 md:gap-5">
 				{screenSide === "left" && <ScreenDoorColumn />}
 
-				<div className="flex flex-1 flex-col gap-3 sm:gap-3 md:gap-4 min-w-0">
+				<div className="flex min-w-0 flex-1 flex-col gap-3 sm:gap-3 md:gap-4">
 					{/* Rows A and B with edge seat */}
-					<div className="flex items-center gap-3 sm:gap-3 md:gap-4 min-w-0">
+					<div className="flex min-w-0 items-center gap-3 sm:gap-3 md:gap-4">
 						{edgeOnLeft && edgeSeat && (
 							<div className="shrink-0">{edgeSeat}</div>
 						)}
-						<div className="flex flex-1 flex-col gap-2 sm:gap-2 md:gap-3 min-w-0">
-							{rowA && <div className="flex gap-2 sm:gap-2 md:gap-3 min-w-0">{renderRow(rowA, 0)}</div>}
-							{rowB && <div className="flex gap-2 sm:gap-2 md:gap-3 min-w-0">{renderRow(rowB, 1)}</div>}
+						<div className="flex min-w-0 flex-1 flex-col gap-2 sm:gap-2 md:gap-3">
+							{rowA && (
+								<div className="flex min-w-0 gap-2 sm:gap-2 md:gap-3">
+									{renderRow(rowA, 0)}
+								</div>
+							)}
+							{rowB && (
+								<div className="flex min-w-0 gap-2 sm:gap-2 md:gap-3">
+									{renderRow(rowB, 1)}
+								</div>
+							)}
 						</div>
 						{!edgeOnLeft && edgeSeat && (
 							<div className="shrink-0">{edgeSeat}</div>
@@ -285,9 +309,12 @@ const SeatGrid = ({
 
 					{/* Remaining rows */}
 					{remainingRows.length > 0 && (
-						<div className="mt-2 sm:mt-2 md:mt-3 flex flex-col gap-2 sm:gap-2 md:gap-3 border-border/40 border-t pt-3 sm:pt-3 md:pt-4 min-w-0">
+						<div className="mt-2 flex min-w-0 flex-col gap-2 border-border/40 border-t pt-3 sm:mt-2 sm:gap-2 sm:pt-3 md:mt-3 md:gap-3 md:pt-4">
 							{remainingRows.map((rowConfig, index) => (
-								<div key={rowConfig.name} className="flex gap-2 sm:gap-2 md:gap-3 min-w-0">
+								<div
+									key={rowConfig.name}
+									className="flex min-w-0 gap-2 sm:gap-2 md:gap-3"
+								>
 									{renderRow(rowConfig, index + 2)}
 								</div>
 							))}

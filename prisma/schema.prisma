@@ -155,6 +155,12 @@ model EquipmentCategory {
   equipment Equipment[]
 }
 
+model EquipmentBrand {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+}
+
 model Equipment {
   id          String   @id @default(cuid())
   labId       String
